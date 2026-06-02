@@ -41,11 +41,11 @@ export function AdvancedSettingsModal({ onClose }: Props) {
                 setPaperSettings({ smartPlacement: e.target.checked })
               }
             />
-            Akıllı yerleşim (2+ sütunda soruları büyük göster)
+            Akıllı yerleşim (uzun soruları tam genişliğe al)
           </label>
           <p className="text-xs text-slate-500 -mt-2 ml-6">
-            2 sütun seçiliyken sorular otomatik tam genişlikte basılır (yatay görseller hariç).
-            Panelden Sütun / Tam genişlik ile değiştirebilirsiniz.
+            Kapalıyken her soru seçilen sütun genişliğinde kalır. Panelden de
+            Sütun / Tam genişlik seçebilirsiniz.
           </p>
 
           <div className="rounded-lg border border-slate-200 p-3">
@@ -182,6 +182,39 @@ export function AdvancedSettingsModal({ onClose }: Props) {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block font-medium">
+              Soru ölçeği ({paperSettings.questionScalePercent ?? 92}%)
+            </span>
+            <input
+              type="range"
+              min={50}
+              max={100}
+              step={1}
+              value={paperSettings.questionScalePercent ?? 92}
+              onChange={(e) =>
+                setPaperSettings({
+                  questionScalePercent: Number(e.target.value),
+                })
+              }
+              className="w-full"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Sütundan taşma varsa yüzdeyi düşürün (ör. %75–85).
+            </p>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={paperSettings.strictColumnFit !== false}
+              onChange={(e) =>
+                setPaperSettings({ strictColumnFit: e.target.checked })
+              }
+            />
+            Soruları sütun içinde tut (taşmayı önle)
           </label>
 
           {paperSettings.columns >= 2 && (

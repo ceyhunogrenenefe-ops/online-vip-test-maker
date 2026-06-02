@@ -3,6 +3,7 @@ import type { OpticalFormPlacement, PaperSettings, Question } from "@/types";
 import { renderQuestionToDataUrl } from "./question-render";
 import { registerTurkishFont, setTurkishFont } from "./pdf-font";
 import {
+  columnContentWidth,
   fitImageInBox,
   layoutHintsForColumns,
   resolveLayoutSpan,
@@ -143,18 +144,34 @@ export async function generateTestPdf(
   const opticalSidebar =
     settings.includeOpticalForm && settings.opticalPlacement === "sidebar";
   const questionCols = opticalSidebar ? Math.max(1, cols - 1) : cols;
-  const layoutHints = layoutHintsForColumns(questionCols);
+  const strictColumnFit = settings.strictColumnFit !== false;
+  const scale =
+    Math.min(100, Math.max(50, settings.questionScalePercent ?? 92)) / 100;
+  const layoutHints = layoutHintsForColumns(questionCols, strictColumnFit);
   const headerH = 34;
   const usableW = pageW - margin * 2;
   const colW = (usableW - COL_GAP * (cols - 1)) / cols;
   const startY = margin + headerH;
   const bottomLimit = pageH - margin;
   const spacing = settings.spacingBetweenQuestions ? 10 : 5;
-  const colInnerW = colW - NUM_WIDTH - 4;
-  const pageInnerW =
-    questionCols > 1
-      ? colW * questionCols + COL_GAP * (questionCols - 1) - NUM_WIDTH - 4
-      : colW - NUM_WIDTH - 4;
+  const colInnerW = columnContentWidth(colW, COL_GAP, 1, NUM_WIDTH);
+  const pageInnerW = columnContentWidth(
+    colW,
+    COL_GAP,
+    questionCols,
+    NUM_WIDTH
+  );
+
+  const opticalReserve =
+    settings.includeOpticalForm && opticalPlacement === "bottom"
+      ? estimateOpticalFormHeight(
+          questions.length,
+          settings,
+          usableW,
+          "horizontal"
+        ) + 10
+      : 0;
+  const questionBottom = () => bottomLimit - opticalReserve;
 
   const doc = new jsPDF({
     orientation: settings.orientation === "landscape" ? "l" : "p",
@@ -218,7 +235,7 @@ export async function generateTestPdf(
     }
     if (y > startY + 2) {
       const minFullH = 40;
-      if (y + minFullH > bottomLimit) await newPage();
+      if (y + minFullH > questionBottom()) await newPage();
     }
     col = 0;
     x = margin;
@@ -234,81 +251,105 @@ export async function generateTestPdf(
     qNum++;
     const q = questions[i];
     const img = await loadImage(rendered[i]);
-    const remainingH = bottomLimit - y - spacing - NUM_BLOCK_H;
+    let placed = false;
 
-    let spanCols = 1;
-    if (q.layoutSpan === "full") {
-      spanCols = questionCols;
-    } else if (q.layoutSpan === "column") {
-      spanCols = 1;
-    } else if (settings.smartPlacement) {
-      spanCols = resolveLayoutSpan(
-        q,
-        img,
-        questionCols,
-        colInnerW,
-        pageInnerW,
-        Math.max(remainingH, 60)
-      );
-    }
+    while (!placed) {
+      const qBottom = questionBottom();
+      const remainingH = qBottom - y - spacing - NUM_BLOCK_H;
 
-    const isFull = spanCols >= questionCols;
-
-    if (isFull) await beginFullWidthRow();
-
-    const maxW = isFull ? pageInnerW : colInnerW;
-    const maxH = Math.max(
-      layoutHints.minHeightMm,
-      bottomLimit - y - spacing - NUM_BLOCK_H
-    );
-    const { w: imgW, h: imgH } = fitImageInBox(
-      img,
-      maxW,
-      maxH,
-      layoutHints.minFillRatio
-    );
-    const blockH = imgH + spacing + NUM_BLOCK_H;
-
-    if (!isFull && y + blockH > bottomLimit) {
-      if (col < questionCols - 1) {
-        col++;
-        x = colX(margin, colW, col);
-        y = startY;
-      } else {
-        await newPage();
+      let spanCols = 1;
+      if (q.layoutSpan === "full") {
+        spanCols = questionCols;
+      } else if (q.layoutSpan === "column") {
+        spanCols = 1;
+      } else if (settings.smartPlacement) {
+        spanCols = resolveLayoutSpan(
+          q,
+          img,
+          questionCols,
+          colInnerW * scale,
+          pageInnerW * scale,
+          Math.max(remainingH, 40),
+          strictColumnFit
+        );
       }
-    } else if (isFull && y + blockH > bottomLimit) {
-      await newPage();
-    }
 
-    const drawX = isFull ? margin : x;
-    const drawImgX = drawX + NUM_WIDTH;
+      const isFull = spanCols >= questionCols;
 
-    setTurkishFont(doc, "bold");
-    doc.setFontSize(11);
-    doc.text(`${qNum}.`, drawX + 1, y + 6);
+      if (isFull) await beginFullWidthRow();
 
-    const imgY = y + 4;
-    doc.setDrawColor(230, 230, 230);
-    doc.setLineWidth(0.15);
-    doc.rect(drawImgX - 0.5, imgY - 0.5, imgW + 1, imgH + 1);
+      const maxW =
+        columnContentWidth(
+          colW,
+          COL_GAP,
+          isFull ? questionCols : 1,
+          NUM_WIDTH
+        ) * scale;
+      let maxH = Math.max(
+        layoutHints.minHeightMm,
+        qBottom - y - spacing - NUM_BLOCK_H
+      );
 
-    doc.addImage(
-      rendered[i],
-      "PNG",
-      drawImgX,
-      imgY,
-      imgW,
-      imgH,
-      undefined,
-      "SLOW"
-    );
+      let { w: imgW, h: imgH } = fitImageInBox(
+        img,
+        maxW,
+        maxH,
+        layoutHints.minFillRatio,
+        layoutHints.strict
+      );
+      let blockH = imgH + spacing + NUM_BLOCK_H;
 
-    y += blockH;
+      while (y + blockH > qBottom && maxH > layoutHints.minHeightMm) {
+        maxH = Math.max(layoutHints.minHeightMm, maxH * 0.85);
+        ({ w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH, 0, true));
+        blockH = imgH + spacing + NUM_BLOCK_H;
+      }
 
-    if (isFull) {
-      col = 0;
-      x = colX(margin, colW, 0);
+      if (!isFull && y + blockH > qBottom) {
+        if (col < questionCols - 1) {
+          col++;
+          x = colX(margin, colW, col);
+          y = startY;
+          continue;
+        }
+        await newPage();
+        continue;
+      }
+      if (isFull && y + blockH > qBottom) {
+        await newPage();
+        continue;
+      }
+
+      const drawX = isFull ? margin : x;
+      const drawImgX = drawX + NUM_WIDTH;
+
+      setTurkishFont(doc, "bold");
+      doc.setFontSize(11);
+      doc.text(`${qNum}.`, drawX + 1, y + 6);
+
+      const imgY = y + 4;
+      doc.setDrawColor(230, 230, 230);
+      doc.setLineWidth(0.15);
+      doc.rect(drawImgX - 0.5, imgY - 0.5, imgW + 1, imgH + 1);
+
+      doc.addImage(
+        rendered[i],
+        "PNG",
+        drawImgX,
+        imgY,
+        imgW,
+        imgH,
+        undefined,
+        "SLOW"
+      );
+
+      y += blockH;
+
+      if (isFull) {
+        col = 0;
+        x = colX(margin, colW, 0);
+      }
+      placed = true;
     }
   }
 

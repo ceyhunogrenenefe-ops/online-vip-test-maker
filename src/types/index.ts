@@ -74,6 +74,10 @@ export interface PaperSettings {
   columns: ColumnCount;
   columnDivider: boolean;
   marginCm: number;
+  /** Soru görseli ölçeği % (sütun taşmasını önlemek için küçültülebilir) */
+  questionScalePercent: number;
+  /** true: sorular kesinlikle sütun genişliğini aşmaz */
+  strictColumnFit: boolean;
 }
 
 /** Kayıtlı kağıt / test taslağı — soru sırası ve ayarlar */
@@ -135,4 +139,6 @@ export const DEFAULT_PAPER_SETTINGS: PaperSettings = {
   columns: 2,
   columnDivider: true,
   marginCm: 1.5,
+  questionScalePercent: 92,
+  strictColumnFit: true,
 };

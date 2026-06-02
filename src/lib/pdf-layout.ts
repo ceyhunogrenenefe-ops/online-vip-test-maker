@@ -1,12 +1,31 @@
 import type { Question, QuestionLayoutSpan } from "@/types";
 
+export function spanWidthMm(
+  colW: number,
+  colGap: number,
+  spanCols: number
+): number {
+  return spanCols * colW + (spanCols - 1) * colGap;
+}
+
+export function columnContentWidth(
+  colW: number,
+  colGap: number,
+  spanCols: number,
+  numWidth: number,
+  pad = 4
+): number {
+  return spanWidthMm(colW, colGap, spanCols) - numWidth - pad;
+}
+
 export function resolveLayoutSpan(
   q: Question,
   img: HTMLImageElement,
   paperCols: number,
   colInnerW: number,
   pageInnerW: number,
-  remainingH: number
+  remainingH: number,
+  strictColumnFit: boolean
 ): number {
   const mode: QuestionLayoutSpan = q.layoutSpan ?? "auto";
   if (paperCols <= 1) return 1;
@@ -15,34 +34,37 @@ export function resolveLayoutSpan(
 
   const ratio = img.height / img.width;
 
-  // Çok sütunda yarım genişlik soruları küçültür — çoğu soruyu tam genişlikte göster
-  if (paperCols >= 2) {
+  if (!strictColumnFit && paperCols >= 2) {
     const wideLandscape = ratio < 0.72;
     return wideLandscape ? 1 : paperCols;
   }
 
   const hIfCol = colInnerW * ratio;
-  const tall = ratio >= 1.05;
-  const tooTallForColumn = hIfCol > remainingH * 0.92;
-  const narrowStrip = ratio >= 0.85 && hIfCol > pageInnerW * 0.55;
+  const tall = ratio >= 1.15;
+  const tooTallForColumn = hIfCol > remainingH * 0.88;
 
-  return tall || tooTallForColumn || narrowStrip ? paperCols : 1;
+  return tall || tooTallForColumn ? paperCols : 1;
 }
 
-export function layoutHintsForColumns(columns: number) {
+export function layoutHintsForColumns(
+  columns: number,
+  strictColumnFit: boolean
+) {
   const multi = columns >= 2;
   return {
-    minFillRatio: multi ? 0.98 : 0.92,
-    minHeightMm: multi ? 42 : 35,
+    minFillRatio: strictColumnFit ? 0 : multi ? 0.88 : 0.92,
+    minHeightMm: multi ? 28 : 35,
+    strict: strictColumnFit,
   };
 }
 
-/** Sütun/genişlik kutusuna sığdırır; mümkün olduğunca geniş ve okunaklı tutar */
+/** Kutu içine sığdır; strict modda asla taşmaz */
 export function fitImageInBox(
   img: HTMLImageElement,
   maxW: number,
   maxH: number,
-  minFillRatio = 0.92
+  minFillRatio = 0.92,
+  strict = false
 ): { w: number; h: number } {
   if (maxW <= 0 || maxH <= 0) return { w: 1, h: 1 };
 
@@ -55,15 +77,20 @@ export function fitImageInBox(
     w = h / ratio;
   }
 
-  const minFill = maxW * minFillRatio;
-  if (w < minFill && h < maxH * 0.98) {
-    w = Math.min(maxW, minFill);
-    h = w * ratio;
-    if (h > maxH) {
-      h = maxH;
-      w = h / ratio;
+  if (!strict) {
+    const minFill = maxW * minFillRatio;
+    if (w < minFill && h < maxH * 0.98) {
+      w = Math.min(maxW, minFill);
+      h = w * ratio;
+      if (h > maxH) {
+        h = maxH;
+        w = h / ratio;
+      }
     }
   }
+
+  w = Math.min(w, maxW);
+  h = Math.min(h, maxH);
 
   return { w, h };
 }
@@ -84,7 +111,6 @@ export async function measureQuestionImage(
   });
 }
 
-/** Uzun sorular önce — PDF’te daha iyi yerleşim */
 export async function sortDraftIdsByVisualSize(
   ids: string[],
   questions: Question[]

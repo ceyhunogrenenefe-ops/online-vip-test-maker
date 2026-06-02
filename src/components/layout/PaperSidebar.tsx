@@ -238,10 +238,14 @@ export function PaperSidebar() {
           </div>
 
           <p className="text-xs text-slate-500">
-            {draftQuestions.length} soru · {paperSettings.columns} sütun
+            {draftQuestions.length} soru · {paperSettings.columns} sütun · ölçek{" "}
+            {paperSettings.questionScalePercent ?? 92}%
             {paperSettings.columnDivider && paperSettings.columns >= 2
               ? " · çizgili"
               : ""}
+          </p>
+          <p className="text-[10px] text-slate-400">
+            Taşma olursa dişli → Soru ölçeğini düşürün veya 1 sütun seçin.
           </p>
 
           <button
