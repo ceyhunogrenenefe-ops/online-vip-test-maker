@@ -6,7 +6,7 @@ export type ColumnCount = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type OpticalFormChoiceCount = 3 | 4 | 5;
 
-export type OpticalFormPlacement = "sidebar" | "separate";
+export type OpticalFormPlacement = "bottom" | "sidebar" | "separate";
 
 export type AnswerOption = "A" | "B" | "C" | "D" | "E";
 
@@ -59,7 +59,7 @@ export interface PaperSettings {
   includeOpticalForm: boolean;
   /** 3, 4 veya 5 şıklı optik form */
   opticalChoiceCount: OpticalFormChoiceCount;
-  /** sidebar = sağ sütunda; separate = ayrı sayfa */
+  /** bottom = sayfa altı; sidebar = sağ sütun; separate = ayrı sayfa */
   opticalPlacement: OpticalFormPlacement;
   opticalFormId?: string;
   /** Kişisel yüklenen optik form görseli */
@@ -107,7 +107,7 @@ export const DEFAULT_PAPER_SETTINGS: PaperSettings = {
   teacherName: "",
   includeOpticalForm: false,
   opticalChoiceCount: 5,
-  opticalPlacement: "sidebar",
+  opticalPlacement: "bottom",
   smartPlacement: true,
   watermark: false,
   watermarkText: "Dershanem",

@@ -41,10 +41,11 @@ export function AdvancedSettingsModal({ onClose }: Props) {
                 setPaperSettings({ smartPlacement: e.target.checked })
               }
             />
-            Akıllı yerleşim (boyuta göre tam genişlik / sütun + büyük görüntü)
+            Akıllı yerleşim (2+ sütunda soruları büyük göster)
           </label>
           <p className="text-xs text-slate-500 -mt-2 ml-6">
-            Panelde her soruda Otomatik / Sütun / Tam genişlik seçebilirsiniz.
+            2 sütun seçiliyken sorular otomatik tam genişlikte basılır (yatay görseller hariç).
+            Panelden Sütun / Tam genişlik ile değiştirebilirsiniz.
           </p>
 
           <div className="rounded-lg border border-slate-200 p-3">
@@ -200,15 +201,21 @@ export function AdvancedSettingsModal({ onClose }: Props) {
             <label>
               <span className="mb-1 block font-medium">Optik form konumu</span>
               <select
-                value={paperSettings.opticalPlacement ?? "sidebar"}
+                value={
+                  paperSettings.opticalPlacement === "sidebar"
+                    ? "bottom"
+                    : paperSettings.opticalPlacement ?? "bottom"
+                }
                 onChange={(e) =>
                   setPaperSettings({
-                    opticalPlacement: e.target.value as "sidebar" | "separate",
+                    opticalPlacement: e.target.value as
+                      | "bottom"
+                      | "separate",
                   })
                 }
                 className="w-full rounded border px-3 py-2"
               >
-                <option value="sidebar">Sağ sütunda (sorular solda)</option>
+                <option value="bottom">Sayfa altında (önerilen)</option>
                 <option value="separate">Ayrı sayfa</option>
               </select>
             </label>

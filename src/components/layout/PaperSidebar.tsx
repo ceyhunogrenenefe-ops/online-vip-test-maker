@@ -232,7 +232,7 @@ export function PaperSidebar() {
                 {paperSettings.opticalCustomImage
                   ? "Kişisel form"
                   : `${paperSettings.opticalChoiceCount ?? 5} şık`}{" "}
-                · sağ sütun — değiştir
+                · sayfa altı — değiştir
               </button>
             )}
           </div>

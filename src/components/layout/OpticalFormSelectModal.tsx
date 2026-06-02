@@ -46,8 +46,7 @@ export function OpticalFormSelectModal({ onClose, onConfirm }: Props) {
       opticalFormId: formId.trim() || undefined,
       opticalCustomImage:
         mode === "custom" ? paperSettings.opticalCustomImage : undefined,
-      opticalPlacement: "sidebar",
-      columns: paperSettings.columns < 2 ? 2 : paperSettings.columns,
+      opticalPlacement: "bottom",
       columnDivider: true,
     });
     onConfirm();
@@ -129,7 +128,7 @@ export function OpticalFormSelectModal({ onClose, onConfirm }: Props) {
         </label>
 
         <p className="mt-3 text-xs text-slate-500">
-          Optik form kağıdın sağ sütununda görünür; sorular solda yer alır.
+          Optik form kağıdın en altında görünür; sorular üstte tam genişlikte yer alır.
         </p>
 
         <input

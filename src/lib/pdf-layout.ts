@@ -14,6 +14,13 @@ export function resolveLayoutSpan(
   if (mode === "column") return 1;
 
   const ratio = img.height / img.width;
+
+  // Çok sütunda yarım genişlik soruları küçültür — çoğu soruyu tam genişlikte göster
+  if (paperCols >= 2) {
+    const wideLandscape = ratio < 0.72;
+    return wideLandscape ? 1 : paperCols;
+  }
+
   const hIfCol = colInnerW * ratio;
   const tall = ratio >= 1.05;
   const tooTallForColumn = hIfCol > remainingH * 0.92;
@@ -22,11 +29,20 @@ export function resolveLayoutSpan(
   return tall || tooTallForColumn || narrowStrip ? paperCols : 1;
 }
 
+export function layoutHintsForColumns(columns: number) {
+  const multi = columns >= 2;
+  return {
+    minFillRatio: multi ? 0.98 : 0.92,
+    minHeightMm: multi ? 42 : 35,
+  };
+}
+
 /** Sütun/genişlik kutusuna sığdırır; mümkün olduğunca geniş ve okunaklı tutar */
 export function fitImageInBox(
   img: HTMLImageElement,
   maxW: number,
-  maxH: number
+  maxH: number,
+  minFillRatio = 0.92
 ): { w: number; h: number } {
   if (maxW <= 0 || maxH <= 0) return { w: 1, h: 1 };
 
@@ -39,7 +55,7 @@ export function fitImageInBox(
     w = h / ratio;
   }
 
-  const minFill = maxW * 0.92;
+  const minFill = maxW * minFillRatio;
   if (w < minFill && h < maxH * 0.98) {
     w = Math.min(maxW, minFill);
     h = w * ratio;

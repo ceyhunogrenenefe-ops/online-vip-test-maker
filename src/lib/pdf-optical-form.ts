@@ -38,13 +38,45 @@ function drawFiducial(
   doc.rect(cx - size / 2, cy - size / 2, size, size, "F");
 }
 
-/** Sağ sütunda OMR optik form (referans düzen) */
+export type OpticalFormLayout = "vertical" | "horizontal";
+
+/** Sayfa altı için tahmini yükseklik (mm) */
+export function estimateOpticalFormHeight(
+  questionCount: number,
+  settings: PaperSettings,
+  areaWidth: number,
+  layout: OpticalFormLayout = "horizontal"
+): number {
+  const choices = settings.opticalChoiceCount ?? 5;
+  if (layout === "vertical") {
+    const rowH = 7.2;
+    const maxRows = Math.max(8, Math.floor(80 / rowH));
+    const cols = Math.max(1, Math.ceil(questionCount / maxRows));
+    return 58 + Math.min(questionCount, maxRows) * rowH + (cols > 1 ? 4 : 0);
+  }
+  const slotW = 7 + choices * 5.2;
+  const perRow = Math.max(1, Math.floor((areaWidth - 24) / slotW));
+  const rows = Math.ceil(questionCount / perRow);
+  return 48 + rows * 8.5;
+}
+
+/** OMR optik form — vertical: dar sütun, horizontal: sayfa altı */
 export function drawBuiltInOpticalForm(
   doc: jsPDF,
   settings: PaperSettings,
   area: { x: number; y: number; w: number; h: number },
-  questionCount: number
+  questionCount: number,
+  layout: OpticalFormLayout = "vertical"
 ) {
+  if (layout === "horizontal") {
+    drawBuiltInOpticalFormHorizontal(
+      doc,
+      settings,
+      area,
+      questionCount
+    );
+    return;
+  }
   const [r, g, b] = hexToRgb(settings.themeColor);
   const choices = settings.opticalChoiceCount ?? 5;
   const labels = OPTION_LABELS[choices];
@@ -160,6 +192,99 @@ export function drawBuiltInOpticalForm(
     align: "center",
   });
   doc.setTextColor(0, 0, 0);
+}
+
+function drawBuiltInOpticalFormHorizontal(
+  doc: jsPDF,
+  settings: PaperSettings,
+  area: { x: number; y: number; w: number; h: number },
+  questionCount: number
+) {
+  const [r, g, b] = hexToRgb(settings.themeColor);
+  const choices = settings.opticalChoiceCount ?? 5;
+  const labels = OPTION_LABELS[choices];
+  const formId = resolveFormId(settings);
+  const pad = 3;
+  const x0 = area.x + pad;
+  const y0 = area.y + pad;
+  const w = area.w - pad * 2;
+  const h = area.h - pad * 2;
+
+  doc.setDrawColor(r, g, b);
+  doc.setLineWidth(0.55);
+  doc.roundedRect(area.x, area.y, area.w, area.h, 2, 2);
+
+  const pillText =
+    settings.classSection?.trim() ||
+    (settings.group !== "Grup Yok" ? settings.group : "") ||
+    settings.testName?.slice(0, 14) ||
+    "SINAV";
+
+  doc.setFillColor(r, g, b);
+  const pillW = Math.min(42, doc.getTextWidth(pillText) + 12);
+  doc.roundedRect(x0 + 2, y0 + 2, pillW, 7, 2, 2, "F");
+  doc.setTextColor(255, 255, 255);
+  setTurkishFont(doc, "bold");
+  doc.setFontSize(7.5);
+  doc.text(pillText.toUpperCase(), x0 + 2 + pillW / 2, y0 + 6.5, {
+    align: "center",
+  });
+
+  setTurkishFont(doc, "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(8);
+  doc.text("Ad - Soyad", x0 + pillW + 8, y0 + 6);
+  doc.setDrawColor(r, g, b);
+  doc.setLineWidth(0.3);
+  doc.rect(x0 + pillW + 28, y0 + 3.5, w - pillW - 52, 6);
+
+  doc.setFontSize(6);
+  doc.setTextColor(90, 90, 90);
+  doc.text(`Form ID: ${formId}`, x0 + w - 2, y0 + 6, { align: "right" });
+  doc.setTextColor(0, 0, 0);
+
+  const gridTop = y0 + 14;
+  const gridBottom = y0 + h - 4;
+  const gridLeft = x0 + 4;
+  const gridRight = x0 + w - 4;
+  const markerSize = 2.8;
+
+  drawFiducial(doc, gridLeft, gridTop, markerSize);
+  drawFiducial(doc, gridRight, gridTop, markerSize);
+  drawFiducial(doc, gridLeft, gridBottom, markerSize);
+  drawFiducial(doc, gridRight, gridBottom, markerSize);
+
+  const bubbleR = 1.65;
+  const rowH = 7.5;
+  const numW = 5;
+  const slotW = numW + labels.length * 5.2;
+  const perRow = Math.max(1, Math.floor((gridRight - gridLeft - 8) / slotW));
+  const headerY = gridTop + 4;
+
+  setTurkishFont(doc, "bold");
+  doc.setFontSize(6.5);
+  labels.forEach((lab, j) => {
+    doc.text(lab, gridLeft + numW + 5.2 * (j + 0.5), headerY, {
+      align: "center",
+    });
+  });
+
+  setTurkishFont(doc, "normal");
+  doc.setFontSize(7.5);
+  doc.setDrawColor(50, 50, 50);
+
+  for (let q = 1; q <= questionCount; q++) {
+    const idx = q - 1;
+    const row = Math.floor(idx / perRow);
+    const col = idx % perRow;
+    const ox = gridLeft + col * slotW;
+    const oy = headerY + 5 + row * rowH;
+
+    doc.text(String(q), ox + 1.5, oy + 1.2);
+    labels.forEach((_, j) => {
+      doc.circle(ox + numW + 5.2 * (j + 0.5), oy, bubbleR);
+    });
+  }
 }
 
 export async function drawCustomOpticalForm(

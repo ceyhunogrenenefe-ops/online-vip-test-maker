@@ -1,11 +1,16 @@
 import { jsPDF } from "jspdf";
-import type { PaperSettings, Question } from "@/types";
+import type { OpticalFormPlacement, PaperSettings, Question } from "@/types";
 import { renderQuestionToDataUrl } from "./question-render";
 import { registerTurkishFont, setTurkishFont } from "./pdf-font";
-import { fitImageInBox, resolveLayoutSpan } from "./pdf-layout";
+import {
+  fitImageInBox,
+  layoutHintsForColumns,
+  resolveLayoutSpan,
+} from "./pdf-layout";
 import {
   drawBuiltInOpticalForm,
   drawCustomOpticalForm,
+  estimateOpticalFormHeight,
 } from "./pdf-optical-form";
 
 const MM_PER_CM = 10;
@@ -20,6 +25,12 @@ function pageDims(settings: PaperSettings) {
     return { w: base.h, h: base.w };
   }
   return base;
+}
+
+function resolveOpticalPlacement(settings: PaperSettings): OpticalFormPlacement {
+  const p = settings.opticalPlacement ?? "bottom";
+  if (p === "sidebar") return "bottom";
+  return p;
 }
 
 async function loadImage(dataUrl: string): Promise<HTMLImageElement> {
@@ -97,12 +108,13 @@ function drawColumnDividers(
   pageH: number,
   margin: number,
   headerH: number,
-  colW: number
+  colW: number,
+  contentBottom: number
 ) {
   if (!settings.columnDivider || settings.columns < 2) return;
   const cols = settings.columns;
   const y0 = margin + headerH;
-  const y1 = pageH - margin;
+  const y1 = contentBottom;
   doc.setDrawColor(100, 100, 100);
   doc.setLineWidth(0.55);
   for (let i = 1; i < cols; i++) {
@@ -127,9 +139,11 @@ export async function generateTestPdf(
   const { w: pageW, h: pageH } = pageDims(settings);
   const margin = settings.marginCm * MM_PER_CM;
   const cols = settings.columns;
+  const opticalPlacement = resolveOpticalPlacement(settings);
   const opticalSidebar =
     settings.includeOpticalForm && settings.opticalPlacement === "sidebar";
   const questionCols = opticalSidebar ? Math.max(1, cols - 1) : cols;
+  const layoutHints = layoutHintsForColumns(questionCols);
   const headerH = 34;
   const usableW = pageW - margin * 2;
   const colW = (usableW - COL_GAP * (cols - 1)) / cols;
@@ -156,7 +170,7 @@ export async function generateTestPdf(
   let y = startY;
   let qNum = 0;
 
-  const paintOpticalColumn = async () => {
+  const paintOpticalSidebar = async () => {
     if (!opticalSidebar) return;
     const opticCol = cols - 1;
     const ox = colX(margin, colW, opticCol);
@@ -169,15 +183,24 @@ export async function generateTestPdf(
     if (settings.opticalCustomImage) {
       await drawCustomOpticalForm(doc, settings.opticalCustomImage, area);
     } else {
-      drawBuiltInOpticalForm(doc, settings, area, questions.length);
+      drawBuiltInOpticalForm(doc, settings, area, questions.length, "vertical");
     }
   };
 
-  const paintPageChrome = async () => {
+  const paintPageChrome = async (contentBottom = bottomLimit) => {
     drawHeader(doc, settings, pageW, margin);
     drawWatermark(doc, settings, pageW, pageH);
-    drawColumnDividers(doc, settings, pageW, pageH, margin, headerH, colW);
-    await paintOpticalColumn();
+    drawColumnDividers(
+      doc,
+      settings,
+      pageW,
+      pageH,
+      margin,
+      headerH,
+      colW,
+      contentBottom
+    );
+    await paintOpticalSidebar();
   };
 
   const newPage = async () => {
@@ -234,8 +257,16 @@ export async function generateTestPdf(
     if (isFull) await beginFullWidthRow();
 
     const maxW = isFull ? pageInnerW : colInnerW;
-    const maxH = Math.max(35, bottomLimit - y - spacing - NUM_BLOCK_H);
-    const { w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH);
+    const maxH = Math.max(
+      layoutHints.minHeightMm,
+      bottomLimit - y - spacing - NUM_BLOCK_H
+    );
+    const { w: imgW, h: imgH } = fitImageInBox(
+      img,
+      maxW,
+      maxH,
+      layoutHints.minFillRatio
+    );
     const blockH = imgH + spacing + NUM_BLOCK_H;
 
     if (!isFull && y + blockH > bottomLimit) {
@@ -281,22 +312,60 @@ export async function generateTestPdf(
     }
   }
 
-  if (
-    settings.includeOpticalForm &&
-    settings.opticalPlacement === "separate"
-  ) {
-    doc.addPage();
-    await paintPageChrome();
-    const area = {
-      x: margin,
-      y: startY,
-      w: usableW,
-      h: bottomLimit - startY,
-    };
+  const drawOpticalAtBottom = async () => {
+    const optH = settings.opticalCustomImage
+      ? Math.min(70, estimateOpticalFormHeight(questions.length, settings, usableW))
+      : estimateOpticalFormHeight(questions.length, settings, usableW, "horizontal");
+    const gap = 6;
+    let optY = bottomLimit - optH;
+
+    if (y + gap > optY) {
+      doc.addPage();
+      await paintPageChrome();
+      optY = bottomLimit - optH;
+    }
+
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.25);
+    doc.line(margin, optY - 3, margin + usableW, optY - 3);
+
+    const area = { x: margin, y: optY, w: usableW, h: optH };
     if (settings.opticalCustomImage) {
       await drawCustomOpticalForm(doc, settings.opticalCustomImage, area);
     } else {
-      drawBuiltInOpticalForm(doc, settings, area, questions.length);
+      drawBuiltInOpticalForm(
+        doc,
+        settings,
+        area,
+        questions.length,
+        "horizontal"
+      );
+    }
+  };
+
+  if (settings.includeOpticalForm) {
+    if (opticalPlacement === "bottom") {
+      await drawOpticalAtBottom();
+    } else if (opticalPlacement === "separate") {
+      doc.addPage();
+      await paintPageChrome();
+      const area = {
+        x: margin,
+        y: startY,
+        w: usableW,
+        h: bottomLimit - startY,
+      };
+      if (settings.opticalCustomImage) {
+        await drawCustomOpticalForm(doc, settings.opticalCustomImage, area);
+      } else {
+        drawBuiltInOpticalForm(
+          doc,
+          settings,
+          area,
+          questions.length,
+          "horizontal"
+        );
+      }
     }
   }
 
