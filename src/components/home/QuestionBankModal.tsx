@@ -1,7 +1,6 @@
 "use client";
 
 import { useAppStore } from "@/store/useAppStore";
-import { saveDraftQuestionIds } from "@/lib/storage";
 
 interface Props {
   onClose: () => void;
@@ -11,11 +10,11 @@ export function QuestionBankModal({ onClose }: Props) {
   const questions = useAppStore((s) => s.questions);
   const draftIds = useAppStore((s) => s.draftIds);
   const addToDraft = useAppStore((s) => s.addToDraft);
+  const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
 
   const add = (id: string) => {
     addToDraft(id);
-    const next = draftIds.includes(id) ? draftIds : [...draftIds, id];
-    saveDraftQuestionIds(next);
+    void saveCurrentProject();
   };
 
   return (

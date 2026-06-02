@@ -15,7 +15,6 @@ import {
 import type { AnswerOption, Question, QuestionLayoutSpan } from "@/types";
 import { ANSWER_OPTIONS, LAYOUT_SPAN_LABELS } from "@/types";
 import { useAppStore } from "@/store/useAppStore";
-import { saveDraftQuestionIds } from "@/lib/storage";
 import { sortDraftIdsByVisualSize } from "@/lib/pdf-layout";
 
 const LAYOUT_CYCLE: QuestionLayoutSpan[] = ["auto", "column", "full"];
@@ -40,14 +39,18 @@ export function QuestionPanel({
   const updateQuestion = useAppStore((s) => s.updateQuestion);
   const draftIds = useAppStore((s) => s.draftIds);
   const reorderDraft = useAppStore((s) => s.reorderDraft);
+  const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
   const allQuestions = useAppStore((s) => s.questions);
   const [dragId, setDragId] = useState<string | null>(null);
   const [sorting, setSorting] = useState(false);
 
-  const persistOrder = useCallback((ids: string[]) => {
-    reorderDraft(ids);
-    void saveDraftQuestionIds(ids);
-  }, [reorderDraft]);
+  const persistOrder = useCallback(
+    (ids: string[]) => {
+      reorderDraft(ids);
+      void saveCurrentProject();
+    },
+    [reorderDraft, saveCurrentProject]
+  );
 
   const moveQuestion = (index: number, dir: -1 | 1) => {
     const next = [...draftIds];

@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useAppStore } from "@/store/useAppStore";
-import { saveQuestion, saveDraftQuestionIds } from "@/lib/storage";
+import { saveQuestion } from "@/lib/storage";
+import { ANSWER_OPTIONS } from "@/types";
+import type { AnswerOption } from "@/types";
 import { readFileAsDataUrl } from "@/lib/crop";
 import type { Question } from "@/types";
 import { QuestionBankModal } from "./QuestionBankModal";
@@ -26,6 +28,8 @@ export function QuestionWorkspace() {
   const addQuestion = useAppStore((s) => s.addQuestion);
   const removeFromDraft = useAppStore((s) => s.removeFromDraft);
   const reorderDraft = useAppStore((s) => s.reorderDraft);
+  const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
+  const updateQuestion = useAppStore((s) => s.updateQuestion);
   const setActiveView = useAppStore((s) => s.setActiveView);
 
   const draftQuestions = draftIds
@@ -53,7 +57,7 @@ export function QuestionWorkspace() {
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
     reorderDraft(next);
-    saveDraftQuestionIds(next);
+    void saveCurrentProject();
   };
 
   return (
@@ -150,21 +154,41 @@ export function QuestionWorkspace() {
                 </button>
               </div>
             </div>
-            <div className="grid flex-1 grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid flex-1 grid-cols-1 gap-4 overflow-y-auto sm:grid-cols-2">
               {draftQuestions.map((q, i) => (
                 <div
                   key={q.id}
-                  className="group relative rounded-lg border bg-white p-2 shadow-sm"
+                  className="group relative rounded-xl border-2 border-slate-200 bg-white p-3 shadow-sm"
                 >
-                  <span className="absolute left-3 top-3 z-10 rounded bg-dershanem-blue px-2 py-0.5 text-xs font-bold text-white">
-                    {i + 1}
-                  </span>
+                  <p className="mb-2 text-sm font-bold text-dershanem-navy">
+                    {i + 1}. Soru
+                  </p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={q.imageDataUrl}
                     alt={`Soru ${i + 1}`}
-                    className="max-h-48 w-full rounded object-contain"
+                    className="max-h-56 w-full rounded object-contain bg-slate-50"
                   />
+                  <div className="mt-2 flex justify-center gap-1">
+                    {ANSWER_OPTIONS.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() =>
+                          updateQuestion(q.id, {
+                            answerKey: opt as AnswerOption,
+                          })
+                        }
+                        className={`h-8 w-8 rounded-full text-sm font-bold transition ${
+                          q.answerKey === opt
+                            ? "bg-dershanem-blue text-white"
+                            : "border border-slate-300 bg-white text-slate-600 hover:border-dershanem-blue"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
                   <div className="mt-2 flex justify-between opacity-0 transition group-hover:opacity-100">
                     <div className="flex gap-1">
                       <button
@@ -190,9 +214,7 @@ export function QuestionWorkspace() {
                       type="button"
                       onClick={() => {
                         removeFromDraft(q.id);
-                        saveDraftQuestionIds(
-                          draftIds.filter((id) => id !== q.id)
-                        );
+                        void saveCurrentProject();
                       }}
                       className="rounded p-1 text-red-500 hover:bg-red-50"
                     >

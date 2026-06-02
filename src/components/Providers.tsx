@@ -2,23 +2,25 @@
 
 import { useEffect } from "react";
 import { useAppStore } from "@/store/useAppStore";
-import {
-  getAllQuestions,
-  getDraftQuestionIds,
-} from "@/lib/storage";
+import { getAllQuestions } from "@/lib/storage";
+import { ProjectAutosave } from "@/components/layout/ProjectAutosave";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const setQuestions = useAppStore((s) => s.setQuestions);
-  const setDraftIds = useAppStore((s) => s.setDraftIds);
+  const hydrateProjects = useAppStore((s) => s.hydrateProjects);
 
   useEffect(() => {
-    Promise.all([getAllQuestions(), getDraftQuestionIds()]).then(
-      ([questions, draftIds]) => {
-        setQuestions(questions);
-        setDraftIds(draftIds);
-      }
-    );
-  }, [setQuestions, setDraftIds]);
+    void (async () => {
+      const questions = await getAllQuestions();
+      setQuestions(questions);
+      await hydrateProjects();
+    })();
+  }, [setQuestions, hydrateProjects]);
 
-  return <>{children}</>;
+  return (
+    <>
+      <ProjectAutosave />
+      {children}
+    </>
+  );
 }

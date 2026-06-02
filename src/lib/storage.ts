@@ -55,10 +55,12 @@ export async function deleteOnlineExam(id: string): Promise<void> {
   await del(`${EXAM_PREFIX}${id}`);
 }
 
+/** @deprecated Proje kaydı için useAppStore.saveCurrentProject kullanın */
 export async function saveDraftQuestionIds(ids: string[]): Promise<void> {
   await set(DRAFT_KEY, ids);
 }
 
+/** @deprecated hydrateProjects kullanın */
 export async function getDraftQuestionIds(): Promise<string[]> {
   return (await get<string[]>(DRAFT_KEY)) ?? [];
 }

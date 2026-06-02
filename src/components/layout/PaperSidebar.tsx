@@ -8,7 +8,6 @@ import { AdvancedSettingsModal } from "./AdvancedSettingsModal";
 import { OpticalFormSelectModal } from "./OpticalFormSelectModal";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { generateTestPdf } from "@/lib/pdf";
-import { saveDraftQuestionIds } from "@/lib/storage";
 
 const paperTabs: { id: PaperType; label: string }[] = [
   { id: "yazili", label: "Yazılı Kağıdı" },
@@ -22,6 +21,7 @@ export function PaperSidebar() {
   const draftIds = useAppStore((s) => s.draftIds);
   const questions = useAppStore((s) => s.questions);
   const setActiveView = useAppStore((s) => s.setActiveView);
+  const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showOpticalModal, setShowOpticalModal] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -39,7 +39,7 @@ export function PaperSidebar() {
     }
     setGenerating(true);
     try {
-      await saveDraftQuestionIds(draftIds);
+      await saveCurrentProject();
       const blob = await generateTestPdf(draftQuestions, paperSettings);
       const name = `${(paperSettings.testName || "sinav").replace(/\s+/g, "_")}.pdf`;
       setPdfFilename(name);
@@ -80,9 +80,9 @@ export function PaperSidebar() {
           </button>
           <button
             type="button"
-            onClick={() => saveDraftQuestionIds(draftIds)}
+            onClick={() => void saveCurrentProject()}
             className="px-2 text-slate-500 hover:text-dershanem-blue"
-            title="Taslağı kaydet"
+            title="Testi kaydet"
           >
             <Save size={18} />
           </button>

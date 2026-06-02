@@ -76,6 +76,23 @@ export interface PaperSettings {
   marginCm: number;
 }
 
+/** Kayıtlı kağıt / test taslağı — soru sırası ve ayarlar */
+export interface TestProject {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  draftIds: string[];
+  paperSettings: PaperSettings;
+}
+
+export interface TestProjectSummary {
+  id: string;
+  name: string;
+  updatedAt: number;
+  draftCount: number;
+}
+
 export interface OnlineExam {
   id: string;
   title: string;

@@ -6,6 +6,7 @@ import { QuestionWorkspace } from "@/components/home/QuestionWorkspace";
 import { CropWorkspace } from "@/components/crop/CropWorkspace";
 import { QuestionEditor } from "@/components/editor/QuestionEditor";
 import { OnlineExamsPanel } from "@/components/online/OnlineExamsPanel";
+import { TestProjectsBar } from "@/components/layout/TestProjectsBar";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function HomePage() {
@@ -29,7 +30,8 @@ export default function HomePage() {
       <Header />
       <div className="flex flex-1 flex-col md:flex-row">
         <PaperSidebar />
-        <main className="flex flex-1 flex-col bg-slate-100 overflow-hidden">
+        <main className="flex flex-1 flex-col overflow-hidden bg-slate-100">
+          <TestProjectsBar />
           {mainContent()}
         </main>
       </div>
