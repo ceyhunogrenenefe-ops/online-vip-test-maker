@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { X, Maximize2, Type } from "lucide-react";
-import type { Question } from "@/types";
+import type { AnswerOption, Question } from "@/types";
 import { expandQuestionImage } from "@/lib/question-render";
 import { useAppStore } from "@/store/useAppStore";
+import { AnswerKeyPicker } from "@/components/AnswerKeyPicker";
 
 interface Props {
   question: Question;
@@ -17,12 +18,16 @@ export function QuestionEditModal({ question, onClose }: Props) {
   const [fontSize, setFontSize] = useState(question.fontSize ?? 14);
   const [preview, setPreview] = useState(question.imageDataUrl);
   const [expanding, setExpanding] = useState(false);
+  const [answerKey, setAnswerKey] = useState<AnswerOption | undefined>(
+    question.answerKey
+  );
 
   const save = () => {
     updateQuestion(question.id, {
       overlayText: text,
       fontSize,
       imageDataUrl: preview,
+      answerKey,
     });
     onClose();
   };
@@ -91,6 +96,12 @@ export function QuestionEditModal({ question, onClose }: Props) {
               className="w-full rounded-lg border px-3 py-2 text-sm"
             />
           </label>
+
+          <AnswerKeyPicker
+            value={answerKey}
+            onChange={setAnswerKey}
+            label="Cevap anahtarı (doğru şık)"
+          />
 
           <label className="block text-sm">
             Yazı boyutu

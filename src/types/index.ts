@@ -4,17 +4,28 @@ export type QuestionSource = "crop" | "upload" | "editor";
 
 export type ColumnCount = 1 | 2 | 3 | 4 | 5 | 6;
 
+export type AnswerOption = "A" | "B" | "C" | "D" | "E";
+
+export const ANSWER_OPTIONS: AnswerOption[] = ["A", "B", "C", "D", "E"];
+
 export interface Question {
   id: string;
   imageDataUrl: string;
   source: QuestionSource;
   createdAt: number;
   label?: string;
-  /** Eklenen metin (soru üstü/altı) */
   overlayText?: string;
   fontSize?: number;
   pdfSourceName?: string;
   pdfPage?: number;
+  /** Doğru cevap — online test ve cevap anahtarı için */
+  answerKey?: AnswerOption;
+}
+
+export interface QuestionSnapshot {
+  id: string;
+  imageDataUrl: string;
+  answerKey?: AnswerOption;
 }
 
 export interface PaperSettings {
@@ -45,10 +56,18 @@ export interface OnlineExam {
   title: string;
   schoolName: string;
   questionIds: string[];
-  questionSnapshots: { id: string; imageDataUrl: string }[];
+  questionSnapshots: QuestionSnapshot[];
   createdAt: number;
   published: boolean;
   durationMinutes?: number;
+}
+
+export interface ExamSubmission {
+  studentName: string;
+  answers: Record<number, string>;
+  submittedAt: number;
+  score?: number;
+  totalGraded?: number;
 }
 
 export const DEFAULT_PAPER_SETTINGS: PaperSettings = {

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Save, Loader2 } from "lucide-react";
+import { Settings, Save, Loader2, Eye } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import type { PaperType } from "@/types";
 import { AdvancedSettingsModal } from "./AdvancedSettingsModal";
-import { generateTestPdf, downloadBlob } from "@/lib/pdf";
+import { PdfPreviewModal } from "./PdfPreviewModal";
+import { generateTestPdf } from "@/lib/pdf";
 import { saveDraftQuestionIds } from "@/lib/storage";
 
 const paperTabs: { id: PaperType; label: string }[] = [
@@ -22,12 +23,14 @@ export function PaperSidebar() {
   const setActiveView = useAppStore((s) => s.setActiveView);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [pdfFilename, setPdfFilename] = useState("sinav.pdf");
 
   const draftQuestions = draftIds
     .map((id) => questions.find((q) => q.id === id))
     .filter((q): q is NonNullable<typeof q> => !!q);
 
-  const handlePrepare = async () => {
+  const handlePreview = async () => {
     if (draftQuestions.length === 0) {
       alert("Önce en az bir soru ekleyin.");
       return;
@@ -36,11 +39,12 @@ export function PaperSidebar() {
     try {
       await saveDraftQuestionIds(draftIds);
       const blob = await generateTestPdf(draftQuestions, paperSettings);
-      const name = (paperSettings.testName || "sinav").replace(/\s+/g, "_");
-      downloadBlob(blob, `${name}.pdf`);
+      const name = `${(paperSettings.testName || "sinav").replace(/\s+/g, "_")}.pdf`;
+      setPdfFilename(name);
+      setPreviewBlob(blob);
     } catch (e) {
       console.error(e);
-      alert("PDF oluşturulurken hata oluştu.");
+      alert("PDF hazırlanırken hata oluştu.");
     } finally {
       setGenerating(false);
     }
@@ -94,7 +98,7 @@ export function PaperSidebar() {
                 setPaperSettings({ testName: e.target.value })
               }
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-dershanem-blue focus:outline-none focus:ring-1 focus:ring-dershanem-blue"
-              placeholder="Örn: 7. Sınıf Matematik"
+              placeholder="Örn: 7. Sınıf Matematik Yazılı"
             />
           </label>
 
@@ -108,7 +112,7 @@ export function PaperSidebar() {
               onChange={(e) =>
                 setPaperSettings({ schoolName: e.target.value })
               }
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-dershanem-blue focus:outline-none focus:ring-1 focus:ring-dershanem-blue"
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
               placeholder="Dershanem"
             />
           </label>
@@ -215,12 +219,15 @@ export function PaperSidebar() {
           </div>
 
           <p className="text-xs text-slate-500">
-            {draftQuestions.length} soru kağıtta
+            {draftQuestions.length} soru · {paperSettings.columns} sütun
+            {paperSettings.columnDivider && paperSettings.columns >= 2
+              ? " · çizgili"
+              : ""}
           </p>
 
           <button
             type="button"
-            onClick={handlePrepare}
+            onClick={handlePreview}
             disabled={generating}
             className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-dershanem-blue py-3 font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-60"
           >
@@ -230,7 +237,10 @@ export function PaperSidebar() {
                 Hazırlanıyor...
               </>
             ) : (
-              "Kağıdı Hazırla (PDF)"
+              <>
+                <Eye size={18} />
+                Kağıdı PDF Olarak Hazırla
+              </>
             )}
           </button>
 
@@ -246,6 +256,14 @@ export function PaperSidebar() {
 
       {showAdvanced && (
         <AdvancedSettingsModal onClose={() => setShowAdvanced(false)} />
+      )}
+
+      {previewBlob && (
+        <PdfPreviewModal
+          blob={previewBlob}
+          filename={pdfFilename}
+          onClose={() => setPreviewBlob(null)}
+        />
       )}
     </>
   );

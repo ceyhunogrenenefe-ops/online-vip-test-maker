@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getOnlineExam } from "@/lib/storage";
+import { gradeAnswers } from "@/lib/answer-key-pdf";
 import type { OnlineExam } from "@/types";
 
 export default function ExamPage() {
@@ -13,6 +14,9 @@ export default function ExamPage() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [studentName, setStudentName] = useState("");
+  const [score, setScore] = useState<{ correct: number; total: number } | null>(
+    null
+  );
 
   useEffect(() => {
     getOnlineExam(id).then((e) => {
@@ -35,11 +39,7 @@ export default function ExamPage() {
         <h1 className="text-xl font-bold">Sınav bulunamadı</h1>
         <p className="text-slate-600">
           Bu link geçersiz olabilir veya sınav henüz bu cihazda
-          yayınlanmamış olabilir. Öğretmeninizden linki tekrar isteyin.
-        </p>
-        <p className="text-sm text-slate-400">
-          Not: Şu an sınav verileri tarayıcıda saklanır; farklı cihazda
-          açmak için bulut depolama (yakında) gerekebilir.
+          yayınlanmamış olabilir.
         </p>
       </div>
     );
@@ -52,15 +52,25 @@ export default function ExamPage() {
       alert("Ad soyad girin.");
       return;
     }
+    const unanswered = questions.findIndex((_, i) => !answers[i]);
+    if (unanswered >= 0) {
+      const ok = confirm(
+        `${unanswered + 1}. soru boş. Yine de teslim edilsin mi?`
+      );
+      if (!ok) return;
+    }
+
+    const graded = gradeAnswers(questions, answers);
+    const payload = {
+      studentName,
+      answers,
+      submittedAt: Date.now(),
+      score: graded.correct,
+      total: graded.total,
+    };
     const key = `exam-result:${exam.id}:${Date.now()}`;
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        studentName,
-        answers,
-        submittedAt: Date.now(),
-      })
-    );
+    localStorage.setItem(key, JSON.stringify(payload));
+    setScore(graded.total > 0 ? graded : null);
     setSubmitted(true);
   };
 
@@ -69,8 +79,13 @@ export default function ExamPage() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
         <h1 className="text-2xl font-bold text-green-700">Teslim edildi</h1>
         <p>{studentName}, cevaplarınız kaydedildi.</p>
+        {score && score.total > 0 && (
+          <p className="text-lg font-semibold text-dershanem-navy">
+            Sonuç: {score.correct} / {score.total} doğru
+          </p>
+        )}
         <p className="text-sm text-slate-500">
-          Öğretmen bu cihazda sonuçları görüntüleyebilir.
+          Öğretmen sonuçları Online Testlerim bölümünden görebilir.
         </p>
       </div>
     );
@@ -85,9 +100,7 @@ export default function ExamPage() {
         <p className="text-sm opacity-80">{exam.schoolName}</p>
         <h1 className="text-xl font-bold">{exam.title}</h1>
         {exam.durationMinutes && (
-          <p className="text-sm mt-1">
-            Süre: {exam.durationMinutes} dakika
-          </p>
+          <p className="mt-1 text-sm">Süre: {exam.durationMinutes} dakika</p>
         )}
       </header>
 
@@ -115,6 +128,7 @@ export default function ExamPage() {
                 alt={`Soru ${i + 1}`}
                 className="mb-4 max-w-full rounded border"
               />
+              <p className="mb-2 text-xs text-slate-500">Cevabınızı işaretleyin</p>
               <div className="flex flex-wrap gap-3">
                 {["A", "B", "C", "D", "E"].map((opt) => (
                   <label

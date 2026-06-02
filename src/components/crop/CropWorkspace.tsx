@@ -30,12 +30,14 @@ import {
 } from "@/lib/pdf-document";
 import { saveQuestion } from "@/lib/storage";
 import { useAppStore } from "@/store/useAppStore";
-import type { Question } from "@/types";
+import type { AnswerOption, Question } from "@/types";
+import { AnswerKeyPicker } from "@/components/AnswerKeyPicker";
 import { ImageCropCanvas } from "./ImageCropCanvas";
 import { syncCropToDetected } from "./ResizableCropBox";
 import { PdfSourceBar, type PdfSession } from "./PdfSourceBar";
 import { QuestionPanel } from "./QuestionPanel";
 import { QuestionEditModal } from "./QuestionEditModal";
+import { QuestionImageEraser } from "./QuestionImageEraser";
 
 type CropMode = "manual" | "auto";
 
@@ -70,6 +72,10 @@ export function CropWorkspace() {
 
   const [panelSelectedId, setPanelSelectedId] = useState<string | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [erasingQuestion, setErasingQuestion] = useState<Question | null>(null);
+  const [pendingAnswerKey, setPendingAnswerKey] = useState<AnswerOption | null>(
+    null
+  );
 
   const activeSession = pdfSessions.find((s) => s.id === activePdfId);
   const activeFile = activePdfId
@@ -244,10 +250,12 @@ export function CropWorkspace() {
         createdAt: Date.now(),
         pdfSourceName: activeSession?.name,
         pdfPage: activeFile ? pdfPage : undefined,
+        answerKey: pendingAnswerKey ?? undefined,
       };
       await saveQuestion(question);
       addQuestion(question);
       setPanelSelectedId(question.id);
+      setPendingAnswerKey(null);
       afterAddToPanel();
     } finally {
       setSaving(false);
@@ -339,6 +347,10 @@ export function CropWorkspace() {
               const q = questions.find((x) => x.id === id);
               if (q) setEditingQuestion(q);
             }}
+            onErase={(id) => {
+              const q = questions.find((x) => x.id === id);
+              if (q) setErasingQuestion(q);
+            }}
             onDelete={(id) => {
               removeQuestion(id);
               if (panelSelectedId === id) setPanelSelectedId(null);
@@ -349,6 +361,15 @@ export function CropWorkspace() {
           <QuestionEditModal
             question={editingQuestion}
             onClose={() => setEditingQuestion(null)}
+          />
+        )}
+        {erasingQuestion && (
+          <QuestionImageEraser
+            question={
+              questions.find((q) => q.id === erasingQuestion.id) ??
+              erasingQuestion
+            }
+            onClose={() => setErasingQuestion(null)}
           />
         )}
       </div>
@@ -515,9 +536,22 @@ export function CropWorkspace() {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 shadow-sm">
+        <div className="rounded-lg bg-white px-3 py-3 shadow-sm space-y-3">
+          <AnswerKeyPicker
+            value={pendingAnswerKey}
+            onChange={setPendingAnswerKey}
+            label="Bu sorunun cevap anahtarı (panele eklemeden önce seçin)"
+            size="sm"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-medium text-slate-600">
             Toplam soru: {panelQuestions.length}
+            {panelQuestions.filter((q) => q.answerKey).length > 0 && (
+              <span className="text-green-600">
+                {" "}
+                · {panelQuestions.filter((q) => q.answerKey).length} anahtarlı
+              </span>
+            )}
           </span>
           <div className="flex gap-2">
             {detected.length > 1 && (
@@ -544,6 +578,7 @@ export function CropWorkspace() {
               Tamam — Panele ekle
             </button>
           </div>
+          </div>
         </div>
 
         <QuestionPanel
@@ -553,6 +588,10 @@ export function CropWorkspace() {
           onEdit={(id) => {
             const q = questions.find((x) => x.id === id);
             if (q) setEditingQuestion(q);
+          }}
+          onErase={(id) => {
+            const q = questions.find((x) => x.id === id);
+            if (q) setErasingQuestion(q);
           }}
           onDelete={(id) => {
             removeQuestion(id);
@@ -662,6 +701,14 @@ export function CropWorkspace() {
             editingQuestion
           }
           onClose={() => setEditingQuestion(null)}
+        />
+      )}
+      {erasingQuestion && (
+        <QuestionImageEraser
+          question={
+            questions.find((q) => q.id === erasingQuestion.id) ?? erasingQuestion
+          }
+          onClose={() => setErasingQuestion(null)}
         />
       )}
     </div>
