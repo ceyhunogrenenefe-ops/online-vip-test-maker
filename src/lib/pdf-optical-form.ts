@@ -54,10 +54,11 @@ export function estimateOpticalFormHeight(
     const cols = Math.max(1, Math.ceil(questionCount / maxRows));
     return 58 + Math.min(questionCount, maxRows) * rowH + (cols > 1 ? 4 : 0);
   }
-  const slotW = 7 + choices * 5.2;
-  const perRow = Math.max(1, Math.floor((areaWidth - 24) / slotW));
-  const rows = Math.ceil(questionCount / perRow);
-  return 48 + rows * 8.5;
+  const rowH = 7.5;
+  const maxRowsPerCol = Math.max(10, Math.floor(95 / rowH));
+  const cols = Math.max(1, Math.ceil(questionCount / maxRowsPerCol));
+  const rows = Math.min(questionCount, maxRowsPerCol);
+  return 50 + 10 + rows * rowH + (cols > 1 ? 2 : 0);
 }
 
 /** OMR optik form — vertical: dar sütun, horizontal: sayfa altı */
@@ -194,6 +195,7 @@ export function drawBuiltInOpticalForm(
   doc.setTextColor(0, 0, 0);
 }
 
+/** Sayfa altı: sorular alt alta, A–E üst satırda */
 function drawBuiltInOpticalFormHorizontal(
   doc: jsPDF,
   settings: PaperSettings,
@@ -221,7 +223,7 @@ function drawBuiltInOpticalFormHorizontal(
     "SINAV";
 
   doc.setFillColor(r, g, b);
-  const pillW = Math.min(42, doc.getTextWidth(pillText) + 12);
+  const pillW = Math.min(48, doc.getTextWidth(pillText) + 12);
   doc.roundedRect(x0 + 2, y0 + 2, pillW, 7, 2, 2, "F");
   doc.setTextColor(255, 255, 255);
   setTurkishFont(doc, "bold");
@@ -236,53 +238,73 @@ function drawBuiltInOpticalFormHorizontal(
   doc.text("Ad - Soyad", x0 + pillW + 8, y0 + 6);
   doc.setDrawColor(r, g, b);
   doc.setLineWidth(0.3);
-  doc.rect(x0 + pillW + 28, y0 + 3.5, w - pillW - 52, 6);
+  doc.rect(x0 + pillW + 28, y0 + 3.5, w - pillW - 50, 6);
 
   doc.setFontSize(6);
   doc.setTextColor(90, 90, 90);
   doc.text(`Form ID: ${formId}`, x0 + w - 2, y0 + 6, { align: "right" });
   doc.setTextColor(0, 0, 0);
 
-  const gridTop = y0 + 14;
-  const gridBottom = y0 + h - 4;
-  const gridLeft = x0 + 4;
-  const gridRight = x0 + w - 4;
+  const gridTop = y0 + 13;
+  const gridBottom = y0 + h - 5;
   const markerSize = 2.8;
+  const bubbleR = 1.7;
+  const rowH = 7.4;
+  const numColW = 7;
+  const labelSpan = 6.2;
+  const blockW = numColW + labels.length * labelSpan;
+
+  const gridInnerH = gridBottom - gridTop - 14;
+  const maxRowsPerCol = Math.max(1, Math.floor(gridInnerH / rowH));
+  const bubbleCols = Math.max(1, Math.ceil(questionCount / maxRowsPerCol));
+  const totalGridW = bubbleCols * blockW;
+  const gridLeft = x0 + Math.max(4, (w - totalGridW) / 2);
+  const gridRight = gridLeft + totalGridW;
 
   drawFiducial(doc, gridLeft, gridTop, markerSize);
   drawFiducial(doc, gridRight, gridTop, markerSize);
   drawFiducial(doc, gridLeft, gridBottom, markerSize);
   drawFiducial(doc, gridRight, gridBottom, markerSize);
 
-  const bubbleR = 1.65;
-  const rowH = 7.5;
-  const numW = 5;
-  const slotW = numW + labels.length * 5.2;
-  const perRow = Math.max(1, Math.floor((gridRight - gridLeft - 8) / slotW));
-  const headerY = gridTop + 4;
+  const headerY = gridTop + 5;
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.2);
+  doc.line(gridLeft, headerY + 2, gridRight, headerY + 2);
 
   setTurkishFont(doc, "bold");
-  doc.setFontSize(6.5);
-  labels.forEach((lab, j) => {
-    doc.text(lab, gridLeft + numW + 5.2 * (j + 0.5), headerY, {
-      align: "center",
+  doc.setFontSize(8);
+  doc.text("Soru", gridLeft + numColW * 0.45, headerY, { align: "center" });
+
+  for (let c = 0; c < bubbleCols; c++) {
+    const colStart = gridLeft + c * blockW;
+    labels.forEach((lab, j) => {
+      doc.text(
+        lab,
+        colStart + numColW + labelSpan * (j + 0.5),
+        headerY,
+        { align: "center" }
+      );
     });
-  });
+  }
 
   setTurkishFont(doc, "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   doc.setDrawColor(50, 50, 50);
 
   for (let q = 1; q <= questionCount; q++) {
-    const idx = q - 1;
-    const row = Math.floor(idx / perRow);
-    const col = idx % perRow;
-    const ox = gridLeft + col * slotW;
-    const oy = headerY + 5 + row * rowH;
+    const block = q - 1;
+    const bCol = Math.floor(block / maxRowsPerCol);
+    const bRow = block % maxRowsPerCol;
+    const colStart = gridLeft + bCol * blockW;
+    const oy = headerY + 5 + bRow * rowH;
 
-    doc.text(String(q), ox + 1.5, oy + 1.2);
+    doc.text(String(q), colStart + 2.5, oy + 1.4);
     labels.forEach((_, j) => {
-      doc.circle(ox + numW + 5.2 * (j + 0.5), oy, bubbleR);
+      doc.circle(
+        colStart + numColW + labelSpan * (j + 0.5),
+        oy,
+        bubbleR
+      );
     });
   }
 }
