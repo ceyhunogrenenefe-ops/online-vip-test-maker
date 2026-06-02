@@ -1,0 +1,35 @@
+{
+  "name": "online-vip-test-maker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dershanem Online VIP Test Maker - soru kesme, PDF ve online sınav",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.1",
+    "jspdf": "^2.5.2",
+    "lucide-react": "^0.468.0",
+    "next": "^15.1.0",
+    "pdfjs-dist": "^4.8.69",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-easy-crop": "^5.2.0",
+    "uuid": "^11.0.3",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^9.16.0",
+    "eslint-config-next": "^15.1.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --dershanem-navy: #1a2744;
+  --dershanem-blue: #2563eb;
+}
+
+body {
+  @apply bg-slate-100 text-slate-900 antialiased;
+}
+
+.drop-zone-active {
+  @apply border-dershanem-blue bg-dershanem-sky/80 ring-2 ring-dershanem-blue;
+}
