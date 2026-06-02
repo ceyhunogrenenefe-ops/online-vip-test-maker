@@ -5,6 +5,7 @@ import { Settings, Save, Loader2, Eye } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import type { PaperType } from "@/types";
 import { AdvancedSettingsModal } from "./AdvancedSettingsModal";
+import { OpticalFormSelectModal } from "./OpticalFormSelectModal";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { generateTestPdf } from "@/lib/pdf";
 import { saveDraftQuestionIds } from "@/lib/storage";
@@ -22,6 +23,7 @@ export function PaperSidebar() {
   const questions = useAppStore((s) => s.questions);
   const setActiveView = useAppStore((s) => s.setActiveView);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showOpticalModal, setShowOpticalModal] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [pdfFilename, setPdfFilename] = useState("sinav.pdf");
@@ -207,15 +209,32 @@ export function PaperSidebar() {
               <input
                 type="checkbox"
                 checked={paperSettings.includeOpticalForm}
-                onChange={(e) =>
-                  setPaperSettings({
-                    includeOpticalForm: e.target.checked,
-                  })
-                }
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setShowOpticalModal(true);
+                  } else {
+                    setPaperSettings({
+                      includeOpticalForm: false,
+                      opticalCustomImage: undefined,
+                    });
+                  }
+                }}
                 className="rounded"
               />
               Optik form ekle
             </label>
+            {paperSettings.includeOpticalForm && (
+              <button
+                type="button"
+                onClick={() => setShowOpticalModal(true)}
+                className="ml-6 text-left text-xs text-dershanem-blue hover:underline"
+              >
+                {paperSettings.opticalCustomImage
+                  ? "Kişisel form"
+                  : `${paperSettings.opticalChoiceCount ?? 5} şık`}{" "}
+                · sağ sütun — değiştir
+              </button>
+            )}
           </div>
 
           <p className="text-xs text-slate-500">
@@ -256,6 +275,13 @@ export function PaperSidebar() {
 
       {showAdvanced && (
         <AdvancedSettingsModal onClose={() => setShowAdvanced(false)} />
+      )}
+
+      {showOpticalModal && (
+        <OpticalFormSelectModal
+          onClose={() => setShowOpticalModal(false)}
+          onConfirm={() => setShowOpticalModal(false)}
+        />
       )}
 
       {previewBlob && (

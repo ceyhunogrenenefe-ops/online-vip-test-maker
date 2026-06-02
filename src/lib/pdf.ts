@@ -2,11 +2,17 @@ import { jsPDF } from "jspdf";
 import type { PaperSettings, Question } from "@/types";
 import { renderQuestionToDataUrl } from "./question-render";
 import { registerTurkishFont, setTurkishFont } from "./pdf-font";
+import { fitImageInBox, resolveLayoutSpan } from "./pdf-layout";
+import {
+  drawBuiltInOpticalForm,
+  drawCustomOpticalForm,
+} from "./pdf-optical-form";
 
 const MM_PER_CM = 10;
 const A4 = { w: 210, h: 297 };
 const COL_GAP = 6;
 const NUM_WIDTH = 8;
+const NUM_BLOCK_H = 10;
 
 function pageDims(settings: PaperSettings) {
   const base = settings.paperSize === "A4" ? A4 : { w: 297, h: 420 };
@@ -121,12 +127,20 @@ export async function generateTestPdf(
   const { w: pageW, h: pageH } = pageDims(settings);
   const margin = settings.marginCm * MM_PER_CM;
   const cols = settings.columns;
+  const opticalSidebar =
+    settings.includeOpticalForm && settings.opticalPlacement === "sidebar";
+  const questionCols = opticalSidebar ? Math.max(1, cols - 1) : cols;
   const headerH = 34;
   const usableW = pageW - margin * 2;
   const colW = (usableW - COL_GAP * (cols - 1)) / cols;
   const startY = margin + headerH;
   const bottomLimit = pageH - margin;
   const spacing = settings.spacingBetweenQuestions ? 10 : 5;
+  const colInnerW = colW - NUM_WIDTH - 4;
+  const pageInnerW =
+    questionCols > 1
+      ? colW * questionCols + COL_GAP * (questionCols - 1) - NUM_WIDTH - 4
+      : colW - NUM_WIDTH - 4;
 
   const doc = new jsPDF({
     orientation: settings.orientation === "landscape" ? "l" : "p",
@@ -142,21 +156,52 @@ export async function generateTestPdf(
   let y = startY;
   let qNum = 0;
 
-  const paintPageChrome = () => {
+  const paintOpticalColumn = async () => {
+    if (!opticalSidebar) return;
+    const opticCol = cols - 1;
+    const ox = colX(margin, colW, opticCol);
+    const area = {
+      x: ox + 1,
+      y: startY,
+      w: colW - 2,
+      h: bottomLimit - startY,
+    };
+    if (settings.opticalCustomImage) {
+      await drawCustomOpticalForm(doc, settings.opticalCustomImage, area);
+    } else {
+      drawBuiltInOpticalForm(doc, settings, area, questions.length);
+    }
+  };
+
+  const paintPageChrome = async () => {
     drawHeader(doc, settings, pageW, margin);
     drawWatermark(doc, settings, pageW, pageH);
     drawColumnDividers(doc, settings, pageW, pageH, margin, headerH, colW);
+    await paintOpticalColumn();
   };
 
-  const newPage = () => {
+  const newPage = async () => {
     doc.addPage();
-    paintPageChrome();
+    await paintPageChrome();
     col = 0;
     x = colX(margin, colW, 0);
     y = startY;
   };
 
-  paintPageChrome();
+  const beginFullWidthRow = async () => {
+    if (col !== 0) {
+      await newPage();
+      return;
+    }
+    if (y > startY + 2) {
+      const minFullH = 40;
+      if (y + minFullH > bottomLimit) await newPage();
+    }
+    col = 0;
+    x = margin;
+  };
+
+  await paintPageChrome();
 
   const rendered = await Promise.all(
     questions.map((q) => renderQuestionToDataUrl(q))
@@ -164,47 +209,63 @@ export async function generateTestPdf(
 
   for (let i = 0; i < questions.length; i++) {
     qNum++;
+    const q = questions[i];
     const img = await loadImage(rendered[i]);
-    const pad = 2;
-    const maxImgW = colW - NUM_WIDTH - pad * 2;
-    const ratio = img.height / img.width;
-    let imgW = maxImgW;
-    let imgH = imgW * ratio;
-    const maxImgH = settings.smartPlacement
-      ? Math.max(50, (bottomLimit - startY) / Math.ceil(questions.length / cols) - spacing - 12)
-      : Math.max(70, 250 / cols);
+    const remainingH = bottomLimit - y - spacing - NUM_BLOCK_H;
 
-    if (imgH > maxImgH) {
-      imgH = maxImgH;
-      imgW = imgH / ratio;
+    let spanCols = 1;
+    if (q.layoutSpan === "full") {
+      spanCols = questionCols;
+    } else if (q.layoutSpan === "column") {
+      spanCols = 1;
+    } else if (settings.smartPlacement) {
+      spanCols = resolveLayoutSpan(
+        q,
+        img,
+        questionCols,
+        colInnerW,
+        pageInnerW,
+        Math.max(remainingH, 60)
+      );
     }
 
-    const blockH = imgH + spacing + 10;
+    const isFull = spanCols >= questionCols;
 
-    if (y + blockH > bottomLimit) {
-      if (col < cols - 1) {
+    if (isFull) await beginFullWidthRow();
+
+    const maxW = isFull ? pageInnerW : colInnerW;
+    const maxH = Math.max(35, bottomLimit - y - spacing - NUM_BLOCK_H);
+    const { w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH);
+    const blockH = imgH + spacing + NUM_BLOCK_H;
+
+    if (!isFull && y + blockH > bottomLimit) {
+      if (col < questionCols - 1) {
         col++;
         x = colX(margin, colW, col);
         y = startY;
       } else {
-        newPage();
+        await newPage();
       }
+    } else if (isFull && y + blockH > bottomLimit) {
+      await newPage();
     }
+
+    const drawX = isFull ? margin : x;
+    const drawImgX = drawX + NUM_WIDTH;
 
     setTurkishFont(doc, "bold");
     doc.setFontSize(11);
-    doc.text(`${qNum}.`, x + 1, y + 6);
+    doc.text(`${qNum}.`, drawX + 1, y + 6);
 
-    const imgX = x + NUM_WIDTH;
     const imgY = y + 4;
     doc.setDrawColor(230, 230, 230);
     doc.setLineWidth(0.15);
-    doc.rect(imgX - 0.5, imgY - 0.5, imgW + 1, imgH + 1);
+    doc.rect(drawImgX - 0.5, imgY - 0.5, imgW + 1, imgH + 1);
 
     doc.addImage(
       rendered[i],
       "PNG",
-      imgX,
+      drawImgX,
       imgY,
       imgW,
       imgH,
@@ -213,33 +274,29 @@ export async function generateTestPdf(
     );
 
     y += blockH;
+
+    if (isFull) {
+      col = 0;
+      x = colX(margin, colW, 0);
+    }
   }
 
-  if (settings.includeOpticalForm) {
+  if (
+    settings.includeOpticalForm &&
+    settings.opticalPlacement === "separate"
+  ) {
     doc.addPage();
-    paintPageChrome();
-    setTurkishFont(doc, "bold");
-    doc.setFontSize(16);
-    doc.text("Optik Cevap Formu", margin, margin + 12);
-    setTurkishFont(doc, "normal");
-    doc.setFontSize(10);
-    doc.text(
-      `${settings.testName || "Test"} — ${questions.length} soru`,
-      margin,
-      margin + 20
-    );
-    const startOpticY = margin + 30;
-    for (let i = 1; i <= questions.length; i++) {
-      const row = Math.floor((i - 1) / 5);
-      const colIdx = (i - 1) % 5;
-      const ox = margin + colIdx * 38;
-      const oy = startOpticY + row * 12;
-      doc.text(`${i}.`, ox, oy);
-      ["A", "B", "C", "D", "E"].forEach((opt, j) => {
-        doc.circle(ox + 8 + j * 5, oy - 1.5, 1.2);
-        doc.setFontSize(7);
-        doc.text(opt, ox + 7 + j * 5, oy + 0.5, { align: "center" });
-      });
+    await paintPageChrome();
+    const area = {
+      x: margin,
+      y: startY,
+      w: usableW,
+      h: bottomLimit - startY,
+    };
+    if (settings.opticalCustomImage) {
+      await drawCustomOpticalForm(doc, settings.opticalCustomImage, area);
+    } else {
+      drawBuiltInOpticalForm(doc, settings, area, questions.length);
     }
   }
 

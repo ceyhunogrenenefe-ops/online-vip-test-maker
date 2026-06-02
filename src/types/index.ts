@@ -4,9 +4,25 @@ export type QuestionSource = "crop" | "upload" | "editor";
 
 export type ColumnCount = 1 | 2 | 3 | 4 | 5 | 6;
 
+export type OpticalFormChoiceCount = 3 | 4 | 5;
+
+export type OpticalFormPlacement = "sidebar" | "separate";
+
 export type AnswerOption = "A" | "B" | "C" | "D" | "E";
 
 export const ANSWER_OPTIONS: AnswerOption[] = ["A", "B", "C", "D", "E"];
+
+/** PDF: auto = boyuta göre tam/sütun, column = tek sütun, full = tüm genişlik */
+export type QuestionLayoutSpan = "auto" | "column" | "full";
+
+export const LAYOUT_SPAN_LABELS: Record<
+  QuestionLayoutSpan,
+  string
+> = {
+  auto: "Otomatik",
+  column: "Sütun",
+  full: "Tam genişlik",
+};
 
 export interface Question {
   id: string;
@@ -20,6 +36,8 @@ export interface Question {
   pdfPage?: number;
   /** Doğru cevap — online test ve cevap anahtarı için */
   answerKey?: AnswerOption;
+  /** Kağıtta yerleşim — çok sütunlu modda tek soru tam sayfa genişliği */
+  layoutSpan?: QuestionLayoutSpan;
 }
 
 export interface QuestionSnapshot {
@@ -39,6 +57,13 @@ export interface PaperSettings {
   includeTeacherName: boolean;
   teacherName: string;
   includeOpticalForm: boolean;
+  /** 3, 4 veya 5 şıklı optik form */
+  opticalChoiceCount: OpticalFormChoiceCount;
+  /** sidebar = sağ sütunda; separate = ayrı sayfa */
+  opticalPlacement: OpticalFormPlacement;
+  opticalFormId?: string;
+  /** Kişisel yüklenen optik form görseli */
+  opticalCustomImage?: string;
   smartPlacement: boolean;
   watermark: boolean;
   watermarkText: string;
@@ -81,6 +106,8 @@ export const DEFAULT_PAPER_SETTINGS: PaperSettings = {
   includeTeacherName: false,
   teacherName: "",
   includeOpticalForm: false,
+  opticalChoiceCount: 5,
+  opticalPlacement: "sidebar",
   smartPlacement: true,
   watermark: false,
   watermarkText: "Dershanem",
