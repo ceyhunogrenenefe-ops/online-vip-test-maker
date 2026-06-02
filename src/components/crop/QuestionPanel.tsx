@@ -10,12 +10,11 @@ import {
   GripVertical,
   Columns2,
   Maximize2,
-  Sparkles,
+  Lock,
 } from "lucide-react";
 import type { AnswerOption, Question, QuestionLayoutSpan } from "@/types";
 import { ANSWER_OPTIONS, LAYOUT_SPAN_LABELS } from "@/types";
 import { useAppStore } from "@/store/useAppStore";
-import { sortDraftIdsByVisualSize } from "@/lib/pdf-layout";
 
 const LAYOUT_CYCLE: QuestionLayoutSpan[] = ["auto", "column", "full"];
 
@@ -40,9 +39,10 @@ export function QuestionPanel({
   const draftIds = useAppStore((s) => s.draftIds);
   const reorderDraft = useAppStore((s) => s.reorderDraft);
   const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
-  const allQuestions = useAppStore((s) => s.questions);
+  const smartPlacement = useAppStore((s) => s.paperSettings.smartPlacement);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [sorting, setSorting] = useState(false);
+
+  const canReorder = !smartPlacement;
 
   const persistOrder = useCallback(
     (ids: string[]) => {
@@ -53,6 +53,7 @@ export function QuestionPanel({
   );
 
   const moveQuestion = (index: number, dir: -1 | 1) => {
+    if (!canReorder) return;
     const next = [...draftIds];
     const target = index + dir;
     if (target < 0 || target >= next.length) return;
@@ -61,7 +62,7 @@ export function QuestionPanel({
   };
 
   const handleDrop = (targetId: string) => {
-    if (!dragId || dragId === targetId) return;
+    if (!canReorder || !dragId || dragId === targetId) return;
     const from = draftIds.indexOf(dragId);
     const to = draftIds.indexOf(targetId);
     if (from < 0 || to < 0) return;
@@ -79,16 +80,6 @@ export function QuestionPanel({
     updateQuestion(q.id, { layoutSpan: next });
   };
 
-  const autoSortBySize = async () => {
-    setSorting(true);
-    try {
-      const sorted = await sortDraftIdsByVisualSize(draftIds, allQuestions);
-      persistOrder(sorted);
-    } finally {
-      setSorting(false);
-    }
-  };
-
   if (questions.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
@@ -103,30 +94,25 @@ export function QuestionPanel({
         <span className="text-sm font-bold text-dershanem-navy">
           Seçilen sorular ({questions.length})
         </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            disabled={sorting || questions.length < 2}
-            onClick={() => void autoSortBySize()}
-            className="flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-            title="Uzun soruları öne al (PDF yerleşimi)"
-          >
-            <Sparkles size={12} />
-            {sorting ? "Sıralanıyor…" : "Akıllı sırala"}
-          </button>
-          <span className="text-[10px] text-slate-400">
-            Sürükleyerek sırayı değiştirin
+        {smartPlacement ? (
+          <span className="flex items-center gap-1 text-[10px] text-amber-700">
+            <Lock size={11} />
+            PDF sırası otomatik (tasarruflu)
           </span>
-        </div>
+        ) : (
+          <span className="text-[10px] text-slate-500">
+            Sürükleyin veya oklarla sırayı belirleyin
+          </span>
+        )}
       </div>
       <div className="flex gap-2 overflow-x-auto p-3">
         {questions.map((q, i) => (
           <div
             key={q.id}
-            draggable
-            onDragStart={() => setDragId(q.id)}
+            draggable={canReorder}
+            onDragStart={() => canReorder && setDragId(q.id)}
             onDragEnd={() => setDragId(null)}
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => canReorder && e.preventDefault()}
             onDrop={() => handleDrop(q.id)}
             className={`w-36 shrink-0 rounded-lg border-2 transition ${
               selectedId === q.id
@@ -134,18 +120,22 @@ export function QuestionPanel({
                 : dragId === q.id
                   ? "border-dershanem-blue opacity-70"
                   : "border-slate-200"
-            }`}
+            } ${!canReorder ? "opacity-95" : ""}`}
           >
             <div className="flex items-center justify-between border-b bg-slate-50 px-1 py-0.5">
               <GripVertical
                 size={14}
-                className="cursor-grab text-slate-400 active:cursor-grabbing"
+                className={
+                  canReorder
+                    ? "cursor-grab text-slate-400 active:cursor-grabbing"
+                    : "text-slate-300"
+                }
               />
               <div className="flex gap-0.5">
                 <button
                   type="button"
                   onClick={() => moveQuestion(i, -1)}
-                  disabled={i === 0}
+                  disabled={!canReorder || i === 0}
                   className="rounded p-0.5 hover:bg-white disabled:opacity-30"
                   title="Sola taşı"
                 >
@@ -154,7 +144,7 @@ export function QuestionPanel({
                 <button
                   type="button"
                   onClick={() => moveQuestion(i, 1)}
-                  disabled={i === questions.length - 1}
+                  disabled={!canReorder || i === questions.length - 1}
                   className="rounded p-0.5 hover:bg-white disabled:opacity-30"
                   title="Sağa taşı"
                 >

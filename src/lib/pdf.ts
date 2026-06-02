@@ -8,6 +8,7 @@ import {
   layoutHintsForColumns,
   resolveLayoutSpan,
 } from "./pdf-layout";
+import { packQuestionsForSmartPdf } from "./pdf-pack";
 import {
   drawBuiltInOpticalForm,
   drawCustomOpticalForm,
@@ -144,16 +145,27 @@ export async function generateTestPdf(
   const opticalSidebar =
     settings.includeOpticalForm && settings.opticalPlacement === "sidebar";
   const questionCols = opticalSidebar ? Math.max(1, cols - 1) : cols;
+  const smartPack = settings.smartPlacement;
   const strictColumnFit = settings.strictColumnFit !== false;
   const scale =
     Math.min(100, Math.max(50, settings.questionScalePercent ?? 92)) / 100;
-  const layoutHints = layoutHintsForColumns(questionCols, strictColumnFit);
+  const layoutHints = layoutHintsForColumns(
+    questionCols,
+    strictColumnFit,
+    smartPack
+  );
   const headerH = 34;
   const usableW = pageW - margin * 2;
   const colW = (usableW - COL_GAP * (cols - 1)) / cols;
   const startY = margin + headerH;
   const bottomLimit = pageH - margin;
-  const spacing = settings.spacingBetweenQuestions ? 10 : 5;
+  const spacing = smartPack
+    ? settings.spacingBetweenQuestions
+      ? 6
+      : 3
+    : settings.spacingBetweenQuestions
+      ? 10
+      : 5;
   const colInnerW = columnContentWidth(colW, COL_GAP, 1, NUM_WIDTH);
   const pageInnerW = columnContentWidth(
     colW,
@@ -243,14 +255,34 @@ export async function generateTestPdf(
 
   await paintPageChrome();
 
-  const rendered = await Promise.all(
-    questions.map((q) => renderQuestionToDataUrl(q))
+  const packParams = {
+    questionCols,
+    colInnerW,
+    pageInnerW,
+    scale,
+    pageContentH: bottomLimit - startY - opticalReserve,
+    spacing,
+    numBlockH: NUM_BLOCK_H,
+  };
+
+  const layoutQuestions = smartPack
+    ? await packQuestionsForSmartPdf(questions, packParams)
+    : questions;
+
+  const renderedEntries = await Promise.all(
+    questions.map(async (q) => ({
+      id: q.id,
+      url: await renderQuestionToDataUrl(q),
+    }))
+  );
+  const renderedById = new Map(
+    renderedEntries.map((e) => [e.id, e.url] as const)
   );
 
-  for (let i = 0; i < questions.length; i++) {
+  for (let i = 0; i < layoutQuestions.length; i++) {
     qNum++;
-    const q = questions[i];
-    const img = await loadImage(rendered[i]);
+    const q = layoutQuestions[i];
+    const img = await loadImage(renderedById.get(q.id)!);
     let placed = false;
 
     while (!placed) {
@@ -262,7 +294,7 @@ export async function generateTestPdf(
         spanCols = questionCols;
       } else if (q.layoutSpan === "column") {
         spanCols = 1;
-      } else if (settings.smartPlacement) {
+      } else if (smartPack) {
         spanCols = resolveLayoutSpan(
           q,
           img,
@@ -270,7 +302,8 @@ export async function generateTestPdf(
           colInnerW * scale,
           pageInnerW * scale,
           Math.max(remainingH, 40),
-          strictColumnFit
+          strictColumnFit,
+          true
         );
       }
 
@@ -333,7 +366,7 @@ export async function generateTestPdf(
       doc.rect(drawImgX - 0.5, imgY - 0.5, imgW + 1, imgH + 1);
 
       doc.addImage(
-        rendered[i],
+        renderedById.get(q.id)!,
         "PNG",
         drawImgX,
         imgY,

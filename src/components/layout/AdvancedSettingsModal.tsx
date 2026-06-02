@@ -41,11 +41,11 @@ export function AdvancedSettingsModal({ onClose }: Props) {
                 setPaperSettings({ smartPlacement: e.target.checked })
               }
             />
-            Akıllı yerleşim (uzun soruları tam genişliğe al)
+            Akıllı soru yerleşimi (tasarruflu PDF)
           </label>
           <p className="text-xs text-slate-500 -mt-2 ml-6">
-            Kapalıyken her soru seçilen sütun genişliğinde kalır. Panelden de
-            Sütun / Tam genişlik seçebilirsiniz.
+            Açıkken PDF soru sırasını otomatik optimize eder; panel sırası
+            kullanılmaz. Kapalıyken panelde sürükleyerek sırayı siz belirlersiniz.
           </p>
 
           <div className="rounded-lg border border-slate-200 p-3">

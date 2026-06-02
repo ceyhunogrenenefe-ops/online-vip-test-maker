@@ -25,7 +25,8 @@ export function resolveLayoutSpan(
   colInnerW: number,
   pageInnerW: number,
   remainingH: number,
-  strictColumnFit: boolean
+  strictColumnFit: boolean,
+  smartPack = false
 ): number {
   const mode: QuestionLayoutSpan = q.layoutSpan ?? "auto";
   if (paperCols <= 1) return 1;
@@ -33,6 +34,14 @@ export function resolveLayoutSpan(
   if (mode === "column") return 1;
 
   const ratio = img.height / img.width;
+
+  if (smartPack) {
+    if (ratio >= 1.35) return paperCols;
+    if (ratio >= 1.15 && colInnerW * ratio > remainingH * 0.9) {
+      return paperCols;
+    }
+    return 1;
+  }
 
   if (!strictColumnFit && paperCols >= 2) {
     const wideLandscape = ratio < 0.72;
@@ -48,13 +57,14 @@ export function resolveLayoutSpan(
 
 export function layoutHintsForColumns(
   columns: number,
-  strictColumnFit: boolean
+  strictColumnFit: boolean,
+  smartPack = false
 ) {
   const multi = columns >= 2;
   return {
-    minFillRatio: strictColumnFit ? 0 : multi ? 0.88 : 0.92,
-    minHeightMm: multi ? 28 : 35,
-    strict: strictColumnFit,
+    minFillRatio: smartPack ? 0.82 : strictColumnFit ? 0 : multi ? 0.88 : 0.92,
+    minHeightMm: smartPack ? 22 : multi ? 28 : 35,
+    strict: smartPack ? true : strictColumnFit,
   };
 }
 

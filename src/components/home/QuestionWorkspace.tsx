@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   Upload,
   Crop,
@@ -30,7 +30,18 @@ export function QuestionWorkspace() {
   const reorderDraft = useAppStore((s) => s.reorderDraft);
   const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
   const updateQuestion = useAppStore((s) => s.updateQuestion);
+  const smartPlacement = useAppStore((s) => s.paperSettings.smartPlacement);
   const setActiveView = useAppStore((s) => s.setActiveView);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const canReorder = !smartPlacement;
+
+  const persistOrder = useCallback(
+    (ids: string[]) => {
+      reorderDraft(ids);
+      void saveCurrentProject();
+    },
+    [reorderDraft, saveCurrentProject]
+  );
 
   const draftQuestions = draftIds
     .map((id) => questions.find((q) => q.id === id))
@@ -52,12 +63,24 @@ export function QuestionWorkspace() {
   };
 
   const moveQuestion = (index: number, dir: -1 | 1) => {
+    if (!canReorder) return;
     const next = [...draftIds];
     const target = index + dir;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
-    reorderDraft(next);
-    void saveCurrentProject();
+    persistOrder(next);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!canReorder || !dragId || dragId === targetId) return;
+    const from = draftIds.indexOf(dragId);
+    const to = draftIds.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...draftIds];
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    persistOrder(next);
+    setDragId(null);
   };
 
   return (
@@ -133,10 +156,17 @@ export function QuestionWorkspace() {
           </div>
         ) : (
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-dershanem-navy">
-                Sınav soruları ({draftQuestions.length})
-              </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="font-semibold text-dershanem-navy">
+                  Sınav soruları ({draftQuestions.length})
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {smartPlacement
+                    ? "Akıllı yerleşim açık — PDF sırası otomatik"
+                    : "Sürükleyerek sırayı değiştirin (PDF aynı sırayı kullanır)"}
+                </p>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -158,7 +188,16 @@ export function QuestionWorkspace() {
               {draftQuestions.map((q, i) => (
                 <div
                   key={q.id}
-                  className="group relative rounded-xl border-2 border-slate-200 bg-white p-3 shadow-sm"
+                  draggable={canReorder}
+                  onDragStart={() => canReorder && setDragId(q.id)}
+                  onDragEnd={() => setDragId(null)}
+                  onDragOver={(e) => canReorder && e.preventDefault()}
+                  onDrop={() => handleDrop(q.id)}
+                  className={`group relative rounded-xl border-2 bg-white p-3 shadow-sm transition ${
+                    dragId === q.id
+                      ? "border-dershanem-blue opacity-80"
+                      : "border-slate-200"
+                  } ${canReorder ? "cursor-grab active:cursor-grabbing" : ""}`}
                 >
                   <p className="mb-2 text-sm font-bold text-dershanem-navy">
                     {i + 1}. Soru
@@ -194,7 +233,7 @@ export function QuestionWorkspace() {
                       <button
                         type="button"
                         onClick={() => moveQuestion(i, -1)}
-                        disabled={i === 0}
+                        disabled={!canReorder || i === 0}
                         className="rounded p-1 hover:bg-slate-100 disabled:opacity-30"
                         title="Yukarı"
                       >
@@ -203,7 +242,9 @@ export function QuestionWorkspace() {
                       <button
                         type="button"
                         onClick={() => moveQuestion(i, 1)}
-                        disabled={i === draftQuestions.length - 1}
+                        disabled={
+                          !canReorder || i === draftQuestions.length - 1
+                        }
                         className="rounded p-1 hover:bg-slate-100 disabled:opacity-30"
                         title="Aşağı"
                       >
