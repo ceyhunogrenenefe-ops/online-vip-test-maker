@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Cropper, { Area } from "react-easy-crop";
 import { v4 as uuidv4 } from "uuid";
 import {
   Upload,
@@ -15,13 +14,11 @@ import {
   ScanSearch,
   SlidersHorizontal,
   Loader2,
+  Maximize2,
 } from "lucide-react";
-import {
-  cropAreaToPosition,
-  estimateZoomForCrop,
-  getCroppedImage,
-  readFileAsDataUrl,
-} from "@/lib/crop";
+import { getCroppedImage, readFileAsDataUrl } from "@/lib/crop";
+import type { PixelCrop } from "@/lib/crop";
+import { defaultCenterCrop } from "@/lib/crop-math";
 import {
   DEFAULT_ENHANCE,
   type EnhanceSettings,
@@ -38,6 +35,8 @@ import {
 import { saveQuestion } from "@/lib/storage";
 import { useAppStore } from "@/store/useAppStore";
 import type { Question } from "@/types";
+import { ImageCropCanvas } from "./ImageCropCanvas";
+import { syncCropToDetected } from "./ResizableCropBox";
 
 type CropMode = "manual" | "auto";
 
@@ -54,9 +53,7 @@ export function CropWorkspace() {
   const [loadingPage, setLoadingPage] = useState(false);
 
   const [cropMode, setCropMode] = useState<CropMode>("manual");
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [activeCrop, setActiveCrop] = useState<PixelCrop | null>(null);
 
   const [detected, setDetected] = useState<DetectedQuestion[]>([]);
   const [selectedDetectId, setSelectedDetectId] = useState<string | null>(null);
@@ -67,8 +64,6 @@ export function CropWorkspace() {
   const [showEnhance, setShowEnhance] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const selectedRegion = detected.find((d) => d.id === selectedDetectId);
-
   const loadPdfPage = useCallback(
     async (file: File, page: number) => {
       setLoadingPage(true);
@@ -77,9 +72,7 @@ export function CropWorkspace() {
         setImageSrc(dataUrl);
         setDetected([]);
         setSelectedDetectId(null);
-        setCroppedAreaPixels(null);
-        setCrop({ x: 0, y: 0 });
-        setZoom(1);
+        setActiveCrop(null);
       } finally {
         setLoadingPage(false);
       }
@@ -92,29 +85,42 @@ export function CropWorkspace() {
   }, [pdfFile, pdfPage, pdfScale, loadPdfPage]);
 
   useEffect(() => {
-    const region =
-      cropMode === "auto" && selectedRegion
-        ? selectedRegion.crop
-        : croppedAreaPixels;
-
-    if (!imageSrc || !region) {
+    if (!imageSrc || !activeCrop) {
       setPreviewUrl(null);
       return;
     }
-
     let cancelled = false;
-    getCroppedImage(imageSrc, region, enhance).then((url) => {
+    getCroppedImage(imageSrc, activeCrop, enhance).then((url) => {
       if (!cancelled) setPreviewUrl(url);
     });
     return () => {
       cancelled = true;
     };
-  }, [imageSrc, croppedAreaPixels, selectedRegion, enhance, cropMode]);
+  }, [imageSrc, activeCrop, enhance]);
 
-  const onCropComplete = useCallback((_: Area, pixels: Area) => {
-    setCroppedAreaPixels(pixels);
-    setSelectedDetectId(null);
+  const initManualCrop = useCallback((w: number, h: number) => {
+    setActiveCrop(defaultCenterCrop(w, h));
   }, []);
+
+  const handleImageSize = useCallback(
+    (w: number, h: number) => {
+      setImageSize({ width: w, height: h });
+      if (cropMode === "manual" && !activeCrop && w > 0) {
+        initManualCrop(w, h);
+      }
+    },
+    [cropMode, activeCrop, initManualCrop]
+  );
+
+  const handleActiveCropChange = useCallback(
+    (crop: PixelCrop) => {
+      setActiveCrop(crop);
+      if (selectedDetectId) {
+        setDetected((prev) => syncCropToDetected(prev, selectedDetectId, crop));
+      }
+    },
+    [selectedDetectId]
+  );
 
   const handleImageFile = async (file: File) => {
     setPdfFile(null);
@@ -123,9 +129,8 @@ export function CropWorkspace() {
     setImageSrc(dataUrl);
     setDetected([]);
     setSelectedDetectId(null);
-    setCroppedAreaPixels(null);
-    setCrop({ x: 0, y: 0 });
-    setZoom(1);
+    setActiveCrop(null);
+    setCropMode("manual");
   };
 
   const handlePdfFile = async (file: File) => {
@@ -155,10 +160,10 @@ export function CropWorkspace() {
       setCropMode("auto");
       if (regions.length > 0) {
         setSelectedDetectId(regions[0].id);
-        applyRegionToCropper(regions[0]);
+        setActiveCrop(regions[0].crop);
       } else {
         alert(
-          "Otomatik soru bulunamadı. Manuel kırpma modunu deneyin veya PDF çözünürlüğünü artırın."
+          "Otomatik soru bulunamadı. Manuel modda kutuyu kendiniz ayarlayın."
         );
       }
     } finally {
@@ -166,33 +171,29 @@ export function CropWorkspace() {
     }
   };
 
-  const applyRegionToCropper = (region: DetectedQuestion) => {
-    if (!imageSize.width) return;
-    const pos = cropAreaToPosition(
-      region.crop,
-      imageSize.width,
-      imageSize.height
-    );
-    setCrop(pos);
-    setZoom(
-      estimateZoomForCrop(
-        region.crop,
-        imageSize.width,
-        imageSize.height
-      )
-    );
-    setCroppedAreaPixels(region.crop);
+  const selectRegion = (id: string) => {
+    const region = detected.find((d) => d.id === id);
+    if (!region) return;
+    setSelectedDetectId(id);
+    setActiveCrop(region.crop);
   };
 
-  const selectRegion = (region: DetectedQuestion) => {
-    setSelectedDetectId(region.id);
-    applyRegionToCropper(region);
+  const switchToManual = () => {
+    setCropMode("manual");
+    setSelectedDetectId(null);
+    if (!activeCrop && imageSize.width > 0) {
+      initManualCrop(imageSize.width, imageSize.height);
+    }
   };
 
-  const activeCrop =
-    cropMode === "auto" && selectedRegion
-      ? selectedRegion.crop
-      : croppedAreaPixels;
+  const expandCropFullWidth = () => {
+    if (!imageSize.width || !activeCrop) return;
+    setActiveCrop({
+      ...activeCrop,
+      x: Math.round(imageSize.width * 0.05),
+      width: Math.round(imageSize.width * 0.9),
+    });
+  };
 
   const saveCrop = async (keepOpen = false) => {
     if (!imageSrc || !activeCrop) return;
@@ -213,7 +214,7 @@ export function CropWorkspace() {
         const next = detected[idx + 1];
         if (keepOpen && next) {
           setSelectedDetectId(next.id);
-          applyRegionToCropper(next);
+          setActiveCrop(next.crop);
         } else if (!keepOpen) {
           resetWorkspace();
         }
@@ -257,7 +258,7 @@ export function CropWorkspace() {
     setPdfPageCount(0);
     setDetected([]);
     setSelectedDetectId(null);
-    setCroppedAreaPixels(null);
+    setActiveCrop(null);
     setPreviewUrl(null);
   };
 
@@ -273,8 +274,7 @@ export function CropWorkspace() {
           PDF veya görsel seçin, soruları otomatik bulun
         </p>
         <p className="mb-6 max-w-md text-center text-sm text-slate-500">
-          PDF sayfaları yüksek çözünürlükle açılır. &quot;Soruları otomatik
-          bul&quot; ile bölgeler tanınır; netlik ve kontrast ayarlanabilir.
+          Kırpma kutusunun kenarlarından sağa-sola çekerek boyutlandırın.
         </p>
         <button
           type="button"
@@ -312,7 +312,7 @@ export function CropWorkspace() {
         {pdfFile && pdfPageCount > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-sm">
             <FileText size={18} className="text-dershanem-blue" />
-            <span className="text-sm font-medium truncate max-w-[180px]">
+            <span className="max-w-[180px] truncate text-sm font-medium">
               {pdfFile.name}
             </span>
             <button
@@ -368,7 +368,7 @@ export function CropWorkspace() {
           </button>
           <button
             type="button"
-            onClick={() => setCropMode("manual")}
+            onClick={switchToManual}
             className={`rounded-lg border px-3 py-2 text-sm ${
               cropMode === "manual"
                 ? "border-dershanem-blue bg-dershanem-sky"
@@ -379,7 +379,13 @@ export function CropWorkspace() {
           </button>
           <button
             type="button"
-            onClick={() => setCropMode("auto")}
+            onClick={() => {
+              setCropMode("auto");
+              if (selectedDetectId) {
+                const r = detected.find((d) => d.id === selectedDetectId);
+                if (r) setActiveCrop(r.crop);
+              }
+            }}
             disabled={detected.length === 0}
             className={`rounded-lg border px-3 py-2 text-sm ${
               cropMode === "auto"
@@ -388,6 +394,16 @@ export function CropWorkspace() {
             }`}
           >
             Otomatik kutular ({detected.length})
+          </button>
+          <button
+            type="button"
+            onClick={expandCropFullWidth}
+            disabled={!activeCrop}
+            className="flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+            title="Seçili kutuyu sayfa genişliğine yaklaştır"
+          >
+            <Maximize2 size={16} />
+            Genişlet
           </button>
           <button
             type="button"
@@ -406,85 +422,26 @@ export function CropWorkspace() {
             </div>
           )}
 
-          {cropMode === "manual" && imageSrc && (
-            <Cropper
-              image={imageSrc}
-              crop={crop}
-              zoom={zoom}
-              aspect={undefined}
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
-              onCropComplete={onCropComplete}
-              onMediaLoaded={(size) =>
-                setImageSize({ width: size.width, height: size.height })
-              }
+          {imageSrc && (
+            <ImageCropCanvas
+              imageSrc={imageSrc}
+              imageWidth={imageSize.width}
+              imageHeight={imageSize.height}
+              onImageSize={handleImageSize}
+              activeCrop={activeCrop}
+              onActiveCropChange={handleActiveCropChange}
+              detected={cropMode === "auto" ? detected : []}
+              selectedDetectId={selectedDetectId}
+              onSelectDetect={selectRegion}
             />
-          )}
-
-          {cropMode === "auto" && imageSrc && (
-            <div className="flex h-full w-full justify-center overflow-auto bg-slate-800 p-2">
-              <div className="relative inline-block max-w-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageSrc}
-                  alt="PDF sayfa"
-                  className="block max-w-full h-auto"
-                  onLoad={(e) => {
-                    const t = e.currentTarget;
-                    setImageSize({
-                      width: t.naturalWidth,
-                      height: t.naturalHeight,
-                    });
-                  }}
-                />
-                {detected.map((region) => {
-                  const sel = region.id === selectedDetectId;
-                  const left = (region.crop.x / imageSize.width) * 100;
-                  const top = (region.crop.y / imageSize.height) * 100;
-                  const w = (region.crop.width / imageSize.width) * 100;
-                  const h = (region.crop.height / imageSize.height) * 100;
-                  if (!imageSize.width) return null;
-                  return (
-                    <button
-                      key={region.id}
-                      type="button"
-                      onClick={() => selectRegion(region)}
-                      className={`absolute border-2 transition ${
-                        sel
-                          ? "border-amber-400 bg-amber-400/20 ring-2 ring-amber-300"
-                          : "border-green-400/80 bg-green-400/10 hover:bg-green-400/25"
-                      }`}
-                      style={{
-                        left: `${left}%`,
-                        top: `${top}%`,
-                        width: `${w}%`,
-                        height: `${h}%`,
-                      }}
-                      title={`Güven: %${Math.round(region.confidence * 100)}`}
-                    />
-                  );
-                })}
-              </div>
-            </div>
           )}
         </div>
 
-        {cropMode === "manual" && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg bg-white p-3 shadow-sm">
-            <label className="flex flex-1 min-w-[160px] items-center gap-2 text-sm">
-              Yakınlaştır
-              <input
-                type="range"
-                min={1}
-                max={3}
-                step={0.1}
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="flex-1"
-              />
-            </label>
-          </div>
-        )}
+        <p className="rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-600">
+          <strong>İpucu:</strong> Sarı kutunun ortasından sürükleyerek taşıyın;
+          kenar ve köşe noktalarından sağa, sola, yukarı veya aşağı çekerek
+          boyutlandırın.
+        </p>
       </div>
 
       <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-72">
@@ -611,13 +568,6 @@ export function CropWorkspace() {
             Yeni dosya
           </button>
         </div>
-
-        {detected.length > 0 && (
-          <p className="text-xs text-slate-500">
-            {detected.length} bölge bulundu. Kutuya tıklayarak seçin; netlik
-            ayarları kayıtta uygulanır.
-          </p>
-        )}
       </aside>
     </div>
   );
