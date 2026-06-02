@@ -14,6 +14,7 @@ interface AppState {
     | "advanced";
   setQuestions: (q: Question[]) => void;
   addQuestion: (q: Question) => void;
+  updateQuestion: (id: string, patch: Partial<Question>) => void;
   removeQuestion: (id: string) => void;
   setDraftIds: (ids: string[]) => void;
   addToDraft: (id: string) => void;
@@ -36,6 +37,12 @@ export const useAppStore = create<AppState>((set) => ({
         ? s.draftIds
         : [...s.draftIds, q.id],
     })),
+  updateQuestion: (id, patch) =>
+    set((s) => ({
+      questions: s.questions.map((q) =>
+        q.id === id ? { ...q, ...patch } : q
+      ),
+    })),
   removeQuestion: (id) =>
     set((s) => ({
       questions: s.questions.filter((x) => x.id !== id),
@@ -51,7 +58,15 @@ export const useAppStore = create<AppState>((set) => ({
   reorderDraft: (draftIds) => set({ draftIds }),
   setPaperSettings: (partial) =>
     set((s) => ({
-      paperSettings: { ...s.paperSettings, ...partial },
+      paperSettings: {
+        ...s.paperSettings,
+        ...partial,
+        columnDivider:
+          partial.columnDivider ??
+          (partial.columns !== undefined
+            ? partial.columns >= 2
+            : s.paperSettings.columnDivider),
+      },
     })),
   setActiveView: (activeView) => set({ activeView }),
 }));

@@ -2,12 +2,19 @@ export type PaperType = "yazili" | "yaprak" | "deneme";
 
 export type QuestionSource = "crop" | "upload" | "editor";
 
+export type ColumnCount = 1 | 2 | 3 | 4 | 5 | 6;
+
 export interface Question {
   id: string;
   imageDataUrl: string;
   source: QuestionSource;
   createdAt: number;
   label?: string;
+  /** Eklenen metin (soru üstü/altı) */
+  overlayText?: string;
+  fontSize?: number;
+  pdfSourceName?: string;
+  pdfPage?: number;
 }
 
 export interface PaperSettings {
@@ -23,10 +30,13 @@ export interface PaperSettings {
   includeOpticalForm: boolean;
   smartPlacement: boolean;
   watermark: boolean;
+  watermarkText: string;
+  watermarkOpacity: number;
   themeColor: string;
   paperSize: "A4" | "A3";
   orientation: "portrait" | "landscape";
-  columns: 1 | 2;
+  columns: ColumnCount;
+  columnDivider: boolean;
   marginCm: number;
 }
 
@@ -35,7 +45,6 @@ export interface OnlineExam {
   title: string;
   schoolName: string;
   questionIds: string[];
-  /** Soru görselleri — paylaşılabilir sınav için paketlenir */
   questionSnapshots: { id: string; imageDataUrl: string }[];
   createdAt: number;
   published: boolean;
@@ -55,9 +64,12 @@ export const DEFAULT_PAPER_SETTINGS: PaperSettings = {
   includeOpticalForm: false,
   smartPlacement: true,
   watermark: false,
+  watermarkText: "Dershanem",
+  watermarkOpacity: 0.12,
   themeColor: "#2563eb",
   paperSize: "A4",
   orientation: "portrait",
   columns: 2,
+  columnDivider: true,
   marginCm: 1.5,
 };

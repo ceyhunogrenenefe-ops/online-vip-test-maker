@@ -1,6 +1,7 @@
 "use client";
 
 import { useAppStore } from "@/store/useAppStore";
+import type { ColumnCount } from "@/types";
 
 const THEME_COLORS = [
   "#f59e0b",
@@ -13,6 +14,8 @@ const THEME_COLORS = [
   "#dc2626",
   "#64748b",
 ];
+
+const COLUMN_OPTIONS: ColumnCount[] = [1, 2, 3, 4, 5, 6];
 
 interface Props {
   onClose: () => void;
@@ -40,16 +43,70 @@ export function AdvancedSettingsModal({ onClose }: Props) {
             />
             Akıllı soru yerleşimi uygula
           </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={paperSettings.watermark}
-              onChange={(e) =>
-                setPaperSettings({ watermark: e.target.checked })
-              }
-            />
-            Filigran ekle
-          </label>
+
+          <div className="rounded-lg border border-slate-200 p-3">
+            <label className="flex items-center gap-2 font-medium">
+              <input
+                type="checkbox"
+                checked={paperSettings.watermark}
+                onChange={(e) =>
+                  setPaperSettings({ watermark: e.target.checked })
+                }
+              />
+              Filigran ekle
+            </label>
+            {paperSettings.watermark && (
+              <div className="mt-3 space-y-2">
+                <input
+                  type="text"
+                  value={paperSettings.watermarkText}
+                  onChange={(e) =>
+                    setPaperSettings({ watermarkText: e.target.value })
+                  }
+                  placeholder="Filigran metni"
+                  className="w-full rounded border px-3 py-2"
+                />
+                <label className="block">
+                  Saydamlık ({Math.round(paperSettings.watermarkOpacity * 100)}%)
+                  <input
+                    type="range"
+                    min={0.05}
+                    max={0.3}
+                    step={0.01}
+                    value={paperSettings.watermarkOpacity}
+                    onChange={(e) =>
+                      setPaperSettings({
+                        watermarkOpacity: Number(e.target.value),
+                      })
+                    }
+                    className="mt-1 w-full"
+                  />
+                </label>
+                <div
+                  className="relative h-24 overflow-hidden rounded border bg-white"
+                  aria-hidden
+                >
+                  <div
+                    className="absolute inset-0 flex flex-wrap items-center justify-center gap-4 p-2"
+                    style={{ opacity: paperSettings.watermarkOpacity }}
+                  >
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <span
+                        key={i}
+                        className="text-lg font-bold text-slate-400"
+                        style={{ transform: "rotate(-25deg)" }}
+                      >
+                        {paperSettings.watermarkText || "Dershanem"}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="absolute bottom-1 right-2 text-[10px] text-slate-400">
+                    Önizleme
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div>
             <p className="mb-2 font-medium">Sayfa tasarım rengi</p>
@@ -106,22 +163,38 @@ export function AdvancedSettingsModal({ onClose }: Props) {
             <span className="mb-1 block font-medium">Sütun sayısı</span>
             <select
               value={paperSettings.columns}
-              onChange={(e) =>
+              onChange={(e) => {
+                const columns = Number(e.target.value) as ColumnCount;
                 setPaperSettings({
-                  columns: Number(e.target.value) as 1 | 2,
-                })
-              }
+                  columns,
+                  columnDivider: columns >= 2,
+                });
+              }}
               className="w-full rounded border px-3 py-2"
             >
-              <option value={1}>1</option>
-              <option value={2}>2</option>
+              {COLUMN_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} sütun
+                </option>
+              ))}
             </select>
           </label>
 
+          {paperSettings.columns >= 2 && (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={paperSettings.columnDivider}
+                onChange={(e) =>
+                  setPaperSettings({ columnDivider: e.target.checked })
+                }
+              />
+              Sütunlar arası dikey çizgi
+            </label>
+          )}
+
           <label>
-            <span className="mb-1 block font-medium">
-              Kenar boşluğu (cm)
-            </span>
+            <span className="mb-1 block font-medium">Kenar boşluğu (cm)</span>
             <select
               value={paperSettings.marginCm}
               onChange={(e) =>

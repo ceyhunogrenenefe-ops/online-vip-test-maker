@@ -5,12 +5,8 @@ import { v4 as uuidv4 } from "uuid";
 import {
   Upload,
   Check,
-  Plus,
-  RotateCcw,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
-  FileText,
   ScanSearch,
   SlidersHorizontal,
   Loader2,
@@ -37,24 +33,32 @@ import { useAppStore } from "@/store/useAppStore";
 import type { Question } from "@/types";
 import { ImageCropCanvas } from "./ImageCropCanvas";
 import { syncCropToDetected } from "./ResizableCropBox";
+import { PdfSourceBar, type PdfSession } from "./PdfSourceBar";
+import { QuestionPanel } from "./QuestionPanel";
+import { QuestionEditModal } from "./QuestionEditModal";
 
 type CropMode = "manual" | "auto";
 
 export function CropWorkspace() {
   const addQuestion = useAppStore((s) => s.addQuestion);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const removeQuestion = useAppStore((s) => s.removeQuestion);
+  const questions = useAppStore((s) => s.questions);
+  const draftIds = useAppStore((s) => s.draftIds);
 
+  const fileRef = useRef<HTMLInputElement>(null);
+  const addPdfRef = useRef<HTMLInputElement>(null);
+  const pdfFilesRef = useRef<Map<string, File>>(new Map());
+
+  const [pdfSessions, setPdfSessions] = useState<PdfSession[]>([]);
+  const [activePdfId, setActivePdfId] = useState<string | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfPage, setPdfPage] = useState(1);
-  const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfScale, setPdfScale] = useState(2);
   const [loadingPage, setLoadingPage] = useState(false);
 
   const [cropMode, setCropMode] = useState<CropMode>("manual");
   const [activeCrop, setActiveCrop] = useState<PixelCrop | null>(null);
-
   const [detected, setDetected] = useState<DetectedQuestion[]>([]);
   const [selectedDetectId, setSelectedDetectId] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
@@ -63,6 +67,34 @@ export function CropWorkspace() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showEnhance, setShowEnhance] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [panelSelectedId, setPanelSelectedId] = useState<string | null>(null);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+
+  const activeSession = pdfSessions.find((s) => s.id === activePdfId);
+  const activeFile = activePdfId
+    ? pdfFilesRef.current.get(activePdfId)
+    : undefined;
+  const pdfPageCount = activeSession?.pageCount ?? 0;
+
+  const panelQuestions = draftIds
+    .map((id) => questions.find((q) => q.id === id))
+    .filter((q): q is Question => !!q);
+
+  const registerPdf = async (file: File) => {
+    const id = uuidv4();
+    const pageCount = await getPdfPageCount(file);
+    pdfFilesRef.current.set(id, file);
+    setPdfSessions((prev) => [
+      ...prev,
+      { id, name: file.name, pageCount },
+    ]);
+    setActivePdfId(id);
+    setPdfPage(1);
+    setDetected([]);
+    setSelectedDetectId(null);
+    setActiveCrop(null);
+  };
 
   const loadPdfPage = useCallback(
     async (file: File, page: number) => {
@@ -81,8 +113,8 @@ export function CropWorkspace() {
   );
 
   useEffect(() => {
-    if (pdfFile && pdfPage >= 1) loadPdfPage(pdfFile, pdfPage);
-  }, [pdfFile, pdfPage, pdfScale, loadPdfPage]);
+    if (activeFile && pdfPage >= 1) loadPdfPage(activeFile, pdfPage);
+  }, [activeFile, pdfPage, pdfScale, loadPdfPage]);
 
   useEffect(() => {
     if (!imageSrc || !activeCrop) {
@@ -123,8 +155,7 @@ export function CropWorkspace() {
   );
 
   const handleImageFile = async (file: File) => {
-    setPdfFile(null);
-    setPdfPageCount(0);
+    setActivePdfId(null);
     const dataUrl = await readFileAsDataUrl(file);
     setImageSrc(dataUrl);
     setDetected([]);
@@ -133,15 +164,8 @@ export function CropWorkspace() {
     setCropMode("manual");
   };
 
-  const handlePdfFile = async (file: File) => {
-    setPdfFile(file);
-    setPdfPage(1);
-    const count = await getPdfPageCount(file);
-    setPdfPageCount(count);
-  };
-
   const handleFile = async (file: File) => {
-    if (isPdfFile(file)) await handlePdfFile(file);
+    if (isPdfFile(file)) await registerPdf(file);
     else await handleImageFile(file);
   };
 
@@ -149,6 +173,25 @@ export function CropWorkspace() {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
+  };
+
+  const switchPdf = (id: string) => {
+    setActivePdfId(id);
+    setPdfPage(1);
+  };
+
+  const removePdfSession = (id: string) => {
+    pdfFilesRef.current.delete(id);
+    setPdfSessions((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      if (activePdfId === id) {
+        const fallback = next[0]?.id ?? null;
+        setActivePdfId(fallback);
+        setPdfPage(1);
+        if (!fallback) setImageSrc(null);
+      }
+      return next;
+    });
   };
 
   const runAutoDetect = async () => {
@@ -162,9 +205,7 @@ export function CropWorkspace() {
         setSelectedDetectId(regions[0].id);
         setActiveCrop(regions[0].crop);
       } else {
-        alert(
-          "Otomatik soru bulunamadı. Manuel modda kutuyu kendiniz ayarlayın."
-        );
+        alert("Otomatik soru bulunamadı. Manuel kutuyu ayarlayın.");
       }
     } finally {
       setDetecting(false);
@@ -178,24 +219,20 @@ export function CropWorkspace() {
     setActiveCrop(region.crop);
   };
 
-  const switchToManual = () => {
-    setCropMode("manual");
-    setSelectedDetectId(null);
-    if (!activeCrop && imageSize.width > 0) {
-      initManualCrop(imageSize.width, imageSize.height);
+  const afterAddToPanel = () => {
+    if (cropMode === "auto" && detected.length > 0 && selectedDetectId) {
+      const idx = detected.findIndex((d) => d.id === selectedDetectId);
+      const next = detected[idx + 1];
+      if (next) {
+        setSelectedDetectId(next.id);
+        setActiveCrop(next.crop);
+        return;
+      }
     }
+    if (imageSize.width > 0) initManualCrop(imageSize.width, imageSize.height);
   };
 
-  const expandCropFullWidth = () => {
-    if (!imageSize.width || !activeCrop) return;
-    setActiveCrop({
-      ...activeCrop,
-      x: Math.round(imageSize.width * 0.05),
-      width: Math.round(imageSize.width * 0.9),
-    });
-  };
-
-  const saveCrop = async (keepOpen = false) => {
+  const addToPanel = async () => {
     if (!imageSrc || !activeCrop) return;
     setSaving(true);
     try {
@@ -205,22 +242,13 @@ export function CropWorkspace() {
         imageDataUrl: dataUrl,
         source: "crop",
         createdAt: Date.now(),
+        pdfSourceName: activeSession?.name,
+        pdfPage: activeFile ? pdfPage : undefined,
       };
       await saveQuestion(question);
       addQuestion(question);
-
-      if (cropMode === "auto" && detected.length > 0) {
-        const idx = detected.findIndex((d) => d.id === selectedDetectId);
-        const next = detected[idx + 1];
-        if (keepOpen && next) {
-          setSelectedDetectId(next.id);
-          setActiveCrop(next.crop);
-        } else if (!keepOpen) {
-          resetWorkspace();
-        }
-      } else if (!keepOpen) {
-        resetWorkspace();
-      }
+      setPanelSelectedId(question.id);
+      afterAddToPanel();
     } finally {
       setSaving(false);
     }
@@ -241,63 +269,93 @@ export function CropWorkspace() {
           imageDataUrl: dataUrl,
           source: "crop",
           createdAt: Date.now(),
+          pdfSourceName: activeSession?.name,
+          pdfPage: activeFile ? pdfPage : undefined,
         };
         await saveQuestion(question);
         addQuestion(question);
       }
-      alert(`${detected.length} soru kaydedildi.`);
-      resetWorkspace();
+      setDetected([]);
+      setCropMode("manual");
+      if (imageSize.width > 0) initManualCrop(imageSize.width, imageSize.height);
     } finally {
       setSaving(false);
     }
   };
 
-  const resetWorkspace = () => {
+  const resetAll = () => {
+    pdfFilesRef.current.clear();
+    setPdfSessions([]);
+    setActivePdfId(null);
     setImageSrc(null);
-    setPdfFile(null);
-    setPdfPageCount(0);
     setDetected([]);
     setSelectedDetectId(null);
     setActiveCrop(null);
     setPreviewUrl(null);
   };
 
-  if (!imageSrc && !pdfFile) {
+  const hasWorkspace = !!imageSrc || pdfSessions.length > 0;
+
+  if (!hasWorkspace) {
     return (
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        className="m-4 flex flex-1 flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-dershanem-sky/40 p-12"
-      >
-        <Upload size={64} className="mb-4 text-dershanem-blue" />
-        <p className="mb-2 text-lg font-medium text-slate-700">
-          PDF veya görsel seçin, soruları otomatik bulun
-        </p>
-        <p className="mb-6 max-w-md text-center text-sm text-slate-500">
-          Kırpma kutusunun kenarlarından sağa-sola çekerek boyutlandırın.
-        </p>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="rounded-lg bg-dershanem-blue px-6 py-2.5 font-medium text-white hover:bg-blue-700"
+      <div className="m-4 flex flex-1 flex-col gap-4">
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          className="flex flex-1 flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-dershanem-sky/40 p-12"
         >
-          Dosya Seç
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*,.pdf,application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
-          }}
-        />
+          <Upload size={64} className="mb-4 text-dershanem-blue" />
+          <p className="mb-2 text-lg font-medium text-slate-700">
+            PDF seçin, ardarda soru kırpın
+          </p>
+          <p className="mb-6 max-w-md text-center text-sm text-slate-500">
+            Birden fazla PDF ekleyebilir, üstten geçiş yapabilirsiniz. Sorular
+            altta küçük önizleme olarak birikir.
+          </p>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="rounded-lg bg-dershanem-blue px-6 py-2.5 font-medium text-white hover:bg-blue-700"
+          >
+            PDF / Görsel Seç
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,.pdf,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+          />
+        </div>
+        {panelQuestions.length > 0 && (
+          <QuestionPanel
+            questions={panelQuestions}
+            selectedId={panelSelectedId}
+            onSelect={setPanelSelectedId}
+            onEdit={(id) => {
+              const q = questions.find((x) => x.id === id);
+              if (q) setEditingQuestion(q);
+            }}
+            onDelete={(id) => {
+              removeQuestion(id);
+              if (panelSelectedId === id) setPanelSelectedId(null);
+            }}
+          />
+        )}
+        {editingQuestion && (
+          <QuestionEditModal
+            question={editingQuestion}
+            onClose={() => setEditingQuestion(null)}
+          />
+        )}
       </div>
     );
   }
 
-  if (pdfFile && !imageSrc && loadingPage) {
+  if (activeFile && !imageSrc && loadingPage) {
     return (
       <div className="m-4 flex flex-1 items-center justify-center gap-2 text-slate-600">
         <Loader2 className="animate-spin" />
@@ -309,32 +367,44 @@ export function CropWorkspace() {
   return (
     <div className="m-4 flex flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        {pdfFile && pdfPageCount > 0 && (
+        <PdfSourceBar
+          sessions={pdfSessions}
+          activeId={activePdfId}
+          onSelect={switchPdf}
+          onAdd={() => addPdfRef.current?.click()}
+          onRemove={removePdfSession}
+        />
+
+        {activeFile && pdfPageCount > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-sm">
-            <FileText size={18} className="text-dershanem-blue" />
-            <span className="max-w-[180px] truncate text-sm font-medium">
-              {pdfFile.name}
-            </span>
             <button
               type="button"
               disabled={pdfPage <= 1}
               onClick={() => setPdfPage((p) => Math.max(1, p - 1))}
-              className="rounded border p-1 disabled:opacity-40"
+              className="rounded border px-2 py-1 text-sm disabled:opacity-40"
             >
-              <ChevronLeft size={18} />
+              Önce
             </button>
-            <span className="text-sm">
-              Sayfa {pdfPage} / {pdfPageCount}
-            </span>
+            <select
+              value={pdfPage}
+              onChange={(e) => setPdfPage(Number(e.target.value))}
+              className="rounded border px-2 py-1 text-sm"
+            >
+              {Array.from({ length: pdfPageCount }, (_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  Sayfa: {i + 1}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               disabled={pdfPage >= pdfPageCount}
               onClick={() =>
                 setPdfPage((p) => Math.min(pdfPageCount, p + 1))
               }
-              className="rounded border p-1 disabled:opacity-40"
+              className="rounded border px-2 py-1 text-sm disabled:opacity-40"
             >
-              <ChevronRight size={18} />
+              Sonra
             </button>
             <label className="ml-auto flex items-center gap-2 text-xs">
               PDF netliği
@@ -364,11 +434,16 @@ export function CropWorkspace() {
             ) : (
               <ScanSearch size={16} />
             )}
-            Soruları otomatik bul
+            Otomatik bul
           </button>
           <button
             type="button"
-            onClick={switchToManual}
+            onClick={() => {
+              setCropMode("manual");
+              setSelectedDetectId(null);
+              if (!activeCrop && imageSize.width > 0)
+                initManualCrop(imageSize.width, imageSize.height);
+            }}
             className={`rounded-lg border px-3 py-2 text-sm ${
               cropMode === "manual"
                 ? "border-dershanem-blue bg-dershanem-sky"
@@ -379,13 +454,7 @@ export function CropWorkspace() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setCropMode("auto");
-              if (selectedDetectId) {
-                const r = detected.find((d) => d.id === selectedDetectId);
-                if (r) setActiveCrop(r.crop);
-              }
-            }}
+            onClick={() => setCropMode("auto")}
             disabled={detected.length === 0}
             className={`rounded-lg border px-3 py-2 text-sm ${
               cropMode === "auto"
@@ -393,14 +462,20 @@ export function CropWorkspace() {
                 : "bg-white"
             }`}
           >
-            Otomatik kutular ({detected.length})
+            Kutular ({detected.length})
           </button>
           <button
             type="button"
-            onClick={expandCropFullWidth}
+            onClick={() => {
+              if (!imageSize.width || !activeCrop) return;
+              setActiveCrop({
+                ...activeCrop,
+                x: Math.round(imageSize.width * 0.03),
+                width: Math.round(imageSize.width * 0.94),
+              });
+            }}
             disabled={!activeCrop}
-            className="flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
-            title="Seçili kutuyu sayfa genişliğine yaklaştır"
+            className="flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm disabled:opacity-50"
           >
             <Maximize2 size={16} />
             Genişlet
@@ -415,14 +490,13 @@ export function CropWorkspace() {
           </button>
         </div>
 
-        <div className="relative min-h-[320px] flex-1 overflow-hidden rounded-xl bg-slate-900">
+        <div className="relative min-h-[280px] flex-1 overflow-hidden rounded-xl bg-slate-900">
           {loadingPage && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 text-white">
               <Loader2 className="animate-spin" />
             </div>
           )}
-
-          {imageSrc && (
+          {imageSrc ? (
             <ImageCropCanvas
               imageSrc={imageSrc}
               imageWidth={imageSize.width}
@@ -434,26 +508,90 @@ export function CropWorkspace() {
               selectedDetectId={selectedDetectId}
               onSelectDetect={selectRegion}
             />
+          ) : (
+            <div className="flex h-full items-center justify-center text-slate-400 text-sm">
+              PDF seçin veya sayfa yükleniyor…
+            </div>
           )}
         </div>
 
-        <p className="rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-600">
-          <strong>İpucu:</strong> Sarı kutunun ortasından sürükleyerek taşıyın;
-          kenar ve köşe noktalarından sağa, sola, yukarı veya aşağı çekerek
-          boyutlandırın.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 shadow-sm">
+          <span className="text-sm font-medium text-slate-600">
+            Toplam soru: {panelQuestions.length}
+          </span>
+          <div className="flex gap-2">
+            {detected.length > 1 && (
+              <button
+                type="button"
+                onClick={saveAllDetected}
+                disabled={saving}
+                className="rounded-lg border border-dershanem-navy px-3 py-2 text-sm font-medium text-dershanem-navy disabled:opacity-50"
+              >
+                Tüm kutuları ekle
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={addToPanel}
+              disabled={saving || !activeCrop}
+              className="flex items-center gap-1 rounded-lg bg-dershanem-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {saving ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Check size={16} />
+              )}
+              Tamam — Panele ekle
+            </button>
+          </div>
+        </div>
+
+        <QuestionPanel
+          questions={panelQuestions}
+          selectedId={panelSelectedId}
+          onSelect={setPanelSelectedId}
+          onEdit={(id) => {
+            const q = questions.find((x) => x.id === id);
+            if (q) setEditingQuestion(q);
+          }}
+          onDelete={(id) => {
+            removeQuestion(id);
+            if (panelSelectedId === id) setPanelSelectedId(null);
+          }}
+        />
+
+        <input
+          ref={addPdfRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) registerPdf(f);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,.pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
+        />
       </div>
 
-      <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-72">
+      <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-64">
         {showEnhance && (
           <div className="rounded-lg bg-white p-4 shadow-sm">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-dershanem-navy">
-              <Sparkles size={16} />
-              Netlik ayarları
+            <h3 className="mb-3 text-sm font-bold text-dershanem-navy">
+              Netlik
             </h3>
-            <div className="space-y-3 text-sm">
+            <div className="space-y-2 text-sm">
               <label className="block">
-                Kontrast ({enhance.contrast.toFixed(1)})
+                Kontrast
                 <input
                   type="range"
                   min={0.6}
@@ -466,28 +604,11 @@ export function CropWorkspace() {
                       contrast: Number(e.target.value),
                     }))
                   }
-                  className="mt-1 w-full"
+                  className="w-full"
                 />
               </label>
               <label className="block">
-                Parlaklık ({enhance.brightness})
-                <input
-                  type="range"
-                  min={-30}
-                  max={40}
-                  step={1}
-                  value={enhance.brightness}
-                  onChange={(e) =>
-                    setEnhance((s) => ({
-                      ...s,
-                      brightness: Number(e.target.value),
-                    }))
-                  }
-                  className="mt-1 w-full"
-                />
-              </label>
-              <label className="block">
-                Keskinlik ({enhance.sharpness.toFixed(1)})
+                Keskinlik
                 <input
                   type="range"
                   min={0}
@@ -500,75 +621,49 @@ export function CropWorkspace() {
                       sharpness: Number(e.target.value),
                     }))
                   }
-                  className="mt-1 w-full"
+                  className="w-full"
                 />
               </label>
-              <button
-                type="button"
-                onClick={() => setEnhance({ ...DEFAULT_ENHANCE })}
-                className="text-xs text-dershanem-blue hover:underline"
-              >
-                Varsayılana sıfırla
-              </button>
             </div>
           </div>
         )}
-
-        <div className="rounded-lg bg-white p-4 shadow-sm">
-          <p className="mb-2 text-xs font-medium text-slate-500">Önizleme</p>
+        <div className="rounded-lg bg-white p-3 shadow-sm">
+          <p className="mb-2 text-xs text-slate-500">Önizleme</p>
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
-              alt="Kırpılmış soru önizleme"
-              className="max-h-40 w-full rounded border object-contain"
+              alt=""
+              className="max-h-36 w-full rounded border object-contain"
             />
           ) : (
-            <div className="flex h-32 items-center justify-center rounded border border-dashed text-xs text-slate-400">
-              Alan seçin
+            <div className="flex h-28 items-center justify-center rounded border border-dashed text-xs text-slate-400">
+              Kutu seçin
             </div>
           )}
         </div>
-
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => saveCrop(false)}
-            disabled={saving || !activeCrop}
-            className="flex items-center justify-center gap-1 rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
-          >
-            <Check size={16} />
-            Soruyu kaydet
-          </button>
-          <button
-            type="button"
-            onClick={() => saveCrop(true)}
-            disabled={saving || !activeCrop}
-            className="flex items-center justify-center gap-1 rounded-lg bg-dershanem-blue py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            <Plus size={16} />
-            Kaydet, sonrakine geç
-          </button>
-          {detected.length > 1 && (
-            <button
-              type="button"
-              onClick={saveAllDetected}
-              disabled={saving}
-              className="rounded-lg border border-dershanem-navy py-2.5 text-sm font-medium text-dershanem-navy hover:bg-slate-50 disabled:opacity-60"
-            >
-              Tümünü kaydet ({detected.length})
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={resetWorkspace}
-            className="flex items-center justify-center gap-1 rounded border py-2 text-sm hover:bg-slate-50"
-          >
-            <RotateCcw size={16} />
-            Yeni dosya
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={resetAll}
+          className="rounded border py-2 text-sm hover:bg-slate-50"
+        >
+          Oturumu kapat
+        </button>
+        <p className="text-xs text-slate-500">
+          Sol panelden <strong>Kağıdı Hazırla</strong> ile PDF alın. Sütun ve
+          filigran için dişli ikonuna tıklayın.
+        </p>
       </aside>
+
+      {editingQuestion && (
+        <QuestionEditModal
+          question={
+            questions.find((q) => q.id === editingQuestion.id) ??
+            editingQuestion
+          }
+          onClose={() => setEditingQuestion(null)}
+        />
+      )}
     </div>
   );
 }
