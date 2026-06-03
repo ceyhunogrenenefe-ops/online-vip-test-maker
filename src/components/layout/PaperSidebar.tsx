@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Settings, Save, Loader2, Eye } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import type { PaperType } from "@/types";
+import type { PaperSettings, PaperType } from "@/types";
 import { AdvancedSettingsModal } from "./AdvancedSettingsModal";
 import { OpticalFormSelectModal } from "./OpticalFormSelectModal";
 import { PdfPreviewModal } from "./PdfPreviewModal";
@@ -14,6 +14,31 @@ const paperTabs: { id: PaperType; label: string }[] = [
   { id: "yaprak", label: "Yaprak Test" },
   { id: "deneme", label: "Deneme Sınavı" },
 ];
+
+function defaultTestDescription(type: PaperType): string {
+  if (type === "yaprak") {
+    return "Konu:\nSüre: 40 dk\nNot: Her soru eşit puandır.";
+  }
+  if (type === "deneme") {
+    return "Deneme sınavı talimatları:\nSüre: 120 dk\nCevaplarınızı optik forma işaretleyiniz.";
+  }
+  return "";
+}
+
+function handlePaperTypeChange(
+  type: PaperType,
+  current: PaperSettings,
+  setPaperSettings: (s: Partial<PaperSettings>) => void
+) {
+  const patch: Partial<PaperSettings> = { paperType: type };
+  if (
+    (type === "yaprak" || type === "deneme") &&
+    !current.testDescription.trim()
+  ) {
+    patch.testDescription = defaultTestDescription(type);
+  }
+  setPaperSettings(patch);
+}
 
 export function PaperSidebar() {
   const paperSettings = useAppStore((s) => s.paperSettings);
@@ -31,6 +56,11 @@ export function PaperSidebar() {
   const draftQuestions = draftIds
     .map((id) => questions.find((q) => q.id === id))
     .filter((q): q is NonNullable<typeof q> => !!q);
+
+  const isProfilePaper =
+    paperSettings.paperType === "yaprak" ||
+    paperSettings.paperType === "deneme";
+  const spacingMm = paperSettings.questionSpacingMm ?? 10;
 
   const handlePreview = async () => {
     if (draftQuestions.length === 0) {
@@ -60,7 +90,13 @@ export function PaperSidebar() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setPaperSettings({ paperType: tab.id })}
+              onClick={() =>
+                handlePaperTypeChange(
+                  tab.id,
+                  paperSettings,
+                  setPaperSettings
+                )
+              }
               className={`flex-1 px-2 py-2.5 text-xs font-medium transition ${
                 paperSettings.paperType === tab.id
                   ? "border-b-2 border-dershanem-blue bg-slate-50 text-dershanem-blue"
@@ -119,23 +155,45 @@ export function PaperSidebar() {
             />
           </label>
 
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-700">
-              Sınav Türü
-            </span>
-            <select
-              value={paperSettings.examType}
-              onChange={(e) =>
-                setPaperSettings({ examType: e.target.value })
-              }
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option>1. Dönem Çoktan Seçmeli Test</option>
-              <option>2. Dönem Yazılı Sınavı</option>
-              <option>Tarama Testi</option>
-              <option>Deneme Sınavı</option>
-            </select>
-          </label>
+          {isProfilePaper ? (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-wide text-dershanem-blue">
+                Test profili
+              </p>
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-slate-700">
+                  Test açıklamaları
+                </span>
+                <textarea
+                  value={paperSettings.testDescription}
+                  onChange={(e) =>
+                    setPaperSettings({ testDescription: e.target.value })
+                  }
+                  rows={4}
+                  className="w-full resize-y rounded border border-slate-300 px-3 py-2 text-sm leading-relaxed"
+                  placeholder="Konu, süre, talimatlar…"
+                />
+              </label>
+            </>
+          ) : (
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-700">
+                Sınav Türü
+              </span>
+              <select
+                value={paperSettings.examType}
+                onChange={(e) =>
+                  setPaperSettings({ examType: e.target.value })
+                }
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option>1. Dönem Çoktan Seçmeli Test</option>
+                <option>2. Dönem Yazılı Sınavı</option>
+                <option>Tarama Testi</option>
+                <option>Deneme Sınavı</option>
+              </select>
+            </label>
+          )}
 
           <label className="text-sm">
             <span className="mb-1 block font-medium text-slate-700">
@@ -181,6 +239,51 @@ export function PaperSidebar() {
               />
               Sorular arasına boşluk bırak
             </label>
+            {paperSettings.spacingBetweenQuestions && (
+              <div className="ml-6 space-y-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
+                <p className="text-xs font-medium text-slate-600">
+                  Boşluk miktarı
+                </p>
+                <div className="flex gap-2">
+                  {[15, 65].map((mm) => (
+                    <button
+                      key={mm}
+                      type="button"
+                      onClick={() =>
+                        setPaperSettings({ questionSpacingMm: mm })
+                      }
+                      className={`flex-1 rounded border px-2 py-1.5 text-xs font-medium transition ${
+                        spacingMm === mm
+                          ? "border-dershanem-blue bg-dershanem-sky/50 text-dershanem-navy"
+                          : "border-slate-200 bg-white hover:bg-slate-100"
+                      }`}
+                    >
+                      {mm} mm
+                    </button>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 text-xs">
+                  <span className="shrink-0 text-slate-600">Özel:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={spacingMm}
+                    onChange={(e) =>
+                      setPaperSettings({
+                        questionSpacingMm: Math.min(
+                          100,
+                          Math.max(0, Number(e.target.value) || 0)
+                        ),
+                      })
+                    }
+                    className="w-full rounded border border-slate-300 px-2 py-1"
+                  />
+                  <span className="shrink-0 text-slate-500">mm</span>
+                </label>
+              </div>
+            )}
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -240,6 +343,9 @@ export function PaperSidebar() {
           <p className="text-xs text-slate-500">
             {draftQuestions.length} soru · {paperSettings.columns} sütun · ölçek{" "}
             {paperSettings.questionScalePercent ?? 92}%
+            {paperSettings.spacingBetweenQuestions
+              ? ` · boşluk ${spacingMm} mm`
+              : ""}
             {paperSettings.columnDivider && paperSettings.columns >= 2
               ? " · çizgili"
               : ""}

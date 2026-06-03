@@ -105,6 +105,64 @@ export function fitImageInBox(
   return { w, h };
 }
 
+/** Sütun genişliğine hizala; yükseklik taşarsa orantılı küçült */
+export function fitImageUniform(
+  img: HTMLImageElement,
+  targetW: number,
+  maxH: number
+): { w: number; h: number } {
+  if (targetW <= 0 || maxH <= 0) return { w: 1, h: 1 };
+  const ratio = img.height / img.width;
+  let w = targetW;
+  let h = w * ratio;
+  if (h > maxH) {
+    h = maxH;
+    w = h / ratio;
+  }
+  return { w, h };
+}
+
+export interface UniformSizingPlan {
+  colWidth: number;
+  colMaxH: number;
+  fullWidth: number;
+  fullMaxH: number;
+}
+
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 40;
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor(sorted.length * p))
+  );
+  return sorted[idx];
+}
+
+/** Tüm sorular için ortak genişlik ve yükseklik bandı hesaplar */
+export function computeUniformSizingPlan(
+  ratios: number[],
+  colInnerW: number,
+  pageInnerW: number,
+  scale: number,
+  pageContentH: number
+): UniformSizingPlan {
+  const colWidth = colInnerW * scale;
+  const fullWidth = pageInnerW * scale;
+  const naturalHeights = ratios.map((r) => colWidth * r).sort((a, b) => a - b);
+  const median = percentile(naturalHeights, 0.5);
+  const p70 = percentile(naturalHeights, 0.7);
+
+  const colMaxH = Math.min(
+    pageContentH * 0.44,
+    Math.max(32, Math.min(p70 * 1.05, median * 1.15))
+  );
+
+  const widthRatio = fullWidth / Math.max(colWidth, 1);
+  const fullMaxH = Math.min(pageContentH * 0.52, colMaxH * widthRatio * 0.92);
+
+  return { colWidth, colMaxH, fullWidth, fullMaxH };
+}
+
 export async function measureQuestionImage(
   dataUrl: string
 ): Promise<{ width: number; height: number; ratio: number }> {

@@ -67,7 +67,7 @@ export async function generateAnswerKeyPdf(
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
   doc.text(
-    `Toplam ${keys.length} soru · Dershanem VIP Test Maker`,
+    `Toplam ${keys.length} soru · Online VIP Test Maker`,
     margin,
     290
   );

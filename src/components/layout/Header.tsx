@@ -32,10 +32,10 @@ export function Header() {
       <div className="flex items-center justify-between px-4 py-2">
         <div className="min-w-[200px]">
           <h1 className="text-lg font-bold tracking-tight">
-            Dershanem VIP Test Maker
+            Online VIP Test Maker
           </h1>
           <p className="text-xs text-slate-300">
-            Online Test Hazırlama Aracı
+            Soru kesme, PDF ve online sınav
           </p>
         </div>
 

@@ -14,19 +14,66 @@ import {
   drawCustomOpticalForm,
   estimateOpticalFormHeight,
 } from "./pdf-optical-form";
+import {
+  drawPageWatermark,
+  type PageObstacle,
+} from "./pdf-watermark";
+import {
+  buildUniformSizingPlan,
+  fitQuestionForPdf,
+  resolveUniformSpanCols,
+} from "./pdf-uniform-size";
 
 const MM_PER_CM = 10;
 const A4 = { w: 210, h: 297 };
+const A3 = { w: 297, h: 420 };
 const COL_GAP = 6;
 const NUM_WIDTH = 8;
 const NUM_BLOCK_H = 10;
 
 function pageDims(settings: PaperSettings) {
-  const base = settings.paperSize === "A4" ? A4 : { w: 297, h: 420 };
+  let base: { w: number; h: number };
+  if (settings.paperSize === "custom") {
+    base = {
+      w: Math.min(600, Math.max(80, settings.customPaperWidthMm ?? 210)),
+      h: Math.min(900, Math.max(80, settings.customPaperHeightMm ?? 297)),
+    };
+  } else if (settings.paperSize === "A3") {
+    base = A3;
+  } else {
+    base = A4;
+  }
   if (settings.orientation === "landscape") {
     return { w: base.h, h: base.w };
   }
   return base;
+}
+
+function questionSpacingMm(settings: PaperSettings, smartPack: boolean): number {
+  if (!settings.spacingBetweenQuestions) {
+    return smartPack ? 3 : 5;
+  }
+  const mm = settings.questionSpacingMm ?? 10;
+  return Math.min(100, Math.max(0, mm));
+}
+
+function headerBarHeight(settings: PaperSettings): number {
+  const base = 30;
+  if (
+    (settings.paperType === "yaprak" || settings.paperType === "deneme") &&
+    settings.testDescription?.trim()
+  ) {
+    const lineCount = Math.min(
+      5,
+      settings.testDescription.split("\n").filter((l) => l.trim()).length
+    );
+    return base + Math.max(0, lineCount - 1) * 3.5;
+  }
+  return base;
+}
+
+function contentHeaderGap(settings: PaperSettings): number {
+  return headerBarHeight(settings) + 4;
 }
 
 function resolveOpticalPlacement(settings: PaperSettings): OpticalFormPlacement {
@@ -51,8 +98,9 @@ function drawHeader(
   margin: number
 ) {
   const theme = settings.themeColor;
+  const barH = headerBarHeight(settings);
   doc.setFillColor(theme);
-  doc.rect(0, 0, pageW, 30, "F");
+  doc.rect(0, 0, pageW, barH, "F");
   doc.setTextColor(255, 255, 255);
   setTurkishFont(doc, "bold");
   doc.setFontSize(14);
@@ -60,45 +108,46 @@ function drawHeader(
   doc.setFontSize(11);
   setTurkishFont(doc, "normal");
   doc.text(settings.testName || "Sınav Kağıdı", margin, 21);
+  setTurkishFont(doc, "normal");
   doc.setFontSize(9);
-  const meta = [
-    settings.examType,
+
+  const isProfilePaper =
+    settings.paperType === "yaprak" || settings.paperType === "deneme";
+
+  if (isProfilePaper && settings.testDescription?.trim()) {
+    const descLines = doc.splitTextToSize(
+      settings.testDescription.trim(),
+      pageW - margin * 2 - 40
+    );
+    const maxLines = Math.min(5, descLines.length);
+    for (let i = 0; i < maxLines; i++) {
+      doc.text(descLines[i], margin, 27 + i * 3.5);
+    }
+  } else if (!isProfilePaper) {
+    const meta = [
+      settings.examType,
+      settings.classSection,
+      settings.group !== "Grup Yok" ? settings.group : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    if (meta) doc.text(meta, margin, 27);
+  }
+
+  const profileMeta = [
     settings.classSection,
     settings.group !== "Grup Yok" ? settings.group : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  if (meta) doc.text(meta, margin, 27);
+  if (isProfilePaper && profileMeta) {
+    doc.text(profileMeta, pageW - margin, barH - 2, { align: "right" });
+  }
+
   if (settings.includeTeacherName && settings.teacherName) {
     doc.text(`Öğretmen: ${settings.teacherName}`, pageW - margin, 21, {
       align: "right",
     });
-  }
-  doc.setTextColor(0, 0, 0);
-}
-
-function drawWatermark(
-  doc: jsPDF,
-  settings: PaperSettings,
-  pageW: number,
-  pageH: number
-) {
-  if (!settings.watermark) return;
-  const text = settings.watermarkText || "Dershanem";
-  const alpha = Math.min(0.35, Math.max(0.05, settings.watermarkOpacity));
-  const gray = Math.round(255 * (1 - alpha));
-  doc.setTextColor(gray, gray, gray);
-  setTurkishFont(doc, "bold");
-  doc.setFontSize(38);
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 3; col++) {
-      doc.text(
-        text,
-        (pageW / 3) * (col + 0.5),
-        (pageH / 4) * (row + 0.8),
-        { align: "center", angle: 32 }
-      );
-    }
   }
   doc.setTextColor(0, 0, 0);
 }
@@ -147,6 +196,7 @@ export async function generateTestPdf(
   const questionCols = opticalSidebar ? Math.max(1, cols - 1) : cols;
   const smartPack = settings.smartPlacement;
   const strictColumnFit = settings.strictColumnFit !== false;
+  const uniformSizing = settings.uniformQuestionSize !== false;
   const scale =
     Math.min(100, Math.max(50, settings.questionScalePercent ?? 92)) / 100;
   const layoutHints = layoutHintsForColumns(
@@ -154,18 +204,12 @@ export async function generateTestPdf(
     strictColumnFit,
     smartPack
   );
-  const headerH = 34;
+  const headerH = contentHeaderGap(settings);
   const usableW = pageW - margin * 2;
   const colW = (usableW - COL_GAP * (cols - 1)) / cols;
   const startY = margin + headerH;
   const bottomLimit = pageH - margin;
-  const spacing = smartPack
-    ? settings.spacingBetweenQuestions
-      ? 6
-      : 3
-    : settings.spacingBetweenQuestions
-      ? 10
-      : 5;
+  const spacing = questionSpacingMm(settings, smartPack);
   const colInnerW = columnContentWidth(colW, COL_GAP, 1, NUM_WIDTH);
   const pageInnerW = columnContentWidth(
     colW,
@@ -188,7 +232,10 @@ export async function generateTestPdf(
   const doc = new jsPDF({
     orientation: settings.orientation === "landscape" ? "l" : "p",
     unit: "mm",
-    format: settings.paperSize.toLowerCase() as "a4" | "a3",
+    format:
+      settings.paperSize === "custom"
+        ? [pageW, pageH]
+        : (settings.paperSize.toLowerCase() as "a4" | "a3"),
     compress: true,
   });
 
@@ -198,6 +245,37 @@ export async function generateTestPdf(
   let x = colX(margin, colW, 0);
   let y = startY;
   let qNum = 0;
+  const pageObstacles: PageObstacle[][] = [];
+  const watermarkedPages = new Set<number>();
+
+  const currentPageIndex = () => doc.getNumberOfPages() - 1;
+
+  const ensureObstacleList = (pageIdx: number) => {
+    while (pageObstacles.length <= pageIdx) pageObstacles.push([]);
+  };
+
+  const addObstacle = (rect: PageObstacle) => {
+    const idx = currentPageIndex();
+    ensureObstacleList(idx);
+    pageObstacles[idx].push(rect);
+  };
+
+  const watermarkContentBottom = () => questionBottom();
+
+  const finishPageWatermark = async () => {
+    if (!settings.watermark) return;
+    const pageIdx = currentPageIndex();
+    if (watermarkedPages.has(pageIdx)) return;
+    watermarkedPages.add(pageIdx);
+    ensureObstacleList(pageIdx);
+    await drawPageWatermark(doc, settings, pageW, pageH, {
+      pageNumber: pageIdx + 1,
+      obstacles: pageObstacles[pageIdx],
+      margin,
+      contentTop: startY,
+      contentBottom: watermarkContentBottom(),
+    });
+  };
 
   const paintOpticalSidebar = async () => {
     if (!opticalSidebar) return;
@@ -218,7 +296,7 @@ export async function generateTestPdf(
 
   const paintPageChrome = async (contentBottom = bottomLimit) => {
     drawHeader(doc, settings, pageW, margin);
-    drawWatermark(doc, settings, pageW, pageH);
+    addObstacle({ x: 0, y: 0, w: pageW, h: startY });
     drawColumnDividers(
       doc,
       settings,
@@ -233,6 +311,7 @@ export async function generateTestPdf(
   };
 
   const newPage = async () => {
+    await finishPageWatermark();
     doc.addPage();
     await paintPageChrome();
     col = 0;
@@ -279,6 +358,18 @@ export async function generateTestPdf(
     renderedEntries.map((e) => [e.id, e.url] as const)
   );
 
+  const pageContentH = bottomLimit - startY - opticalReserve;
+  const uniformPlan = uniformSizing
+    ? await buildUniformSizingPlan(
+        layoutQuestions,
+        renderedById,
+        colInnerW,
+        pageInnerW,
+        scale,
+        pageContentH
+      )
+    : null;
+
   for (let i = 0; i < layoutQuestions.length; i++) {
     qNum++;
     const q = layoutQuestions[i];
@@ -294,6 +385,14 @@ export async function generateTestPdf(
         spanCols = questionCols;
       } else if (q.layoutSpan === "column") {
         spanCols = 1;
+      } else if (uniformPlan) {
+        spanCols = resolveUniformSpanCols(
+          q,
+          img.height / img.width,
+          questionCols,
+          uniformPlan.colMaxH,
+          uniformPlan.colWidth
+        );
       } else if (smartPack) {
         spanCols = resolveLayoutSpan(
           q,
@@ -311,31 +410,57 @@ export async function generateTestPdf(
 
       if (isFull) await beginFullWidthRow();
 
-      const maxW =
-        columnContentWidth(
-          colW,
-          COL_GAP,
-          isFull ? questionCols : 1,
-          NUM_WIDTH
-        ) * scale;
-      let maxH = Math.max(
-        layoutHints.minHeightMm,
-        qBottom - y - spacing - NUM_BLOCK_H
-      );
+      let imgW: number;
+      let imgH: number;
+      let blockH: number;
 
-      let { w: imgW, h: imgH } = fitImageInBox(
-        img,
-        maxW,
-        maxH,
-        layoutHints.minFillRatio,
-        layoutHints.strict
-      );
-      let blockH = imgH + spacing + NUM_BLOCK_H;
-
-      while (y + blockH > qBottom && maxH > layoutHints.minHeightMm) {
-        maxH = Math.max(layoutHints.minHeightMm, maxH * 0.85);
-        ({ w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH, 0, true));
+      if (uniformPlan) {
+        const fitted = fitQuestionForPdf(
+          img,
+          uniformPlan,
+          isFull,
+          Math.max(layoutHints.minHeightMm, remainingH)
+        );
+        if (!fitted) {
+          if (!isFull && col < questionCols - 1) {
+            col++;
+            x = colX(margin, colW, col);
+            y = startY;
+            continue;
+          }
+          await newPage();
+          continue;
+        }
+        imgW = fitted.w;
+        imgH = fitted.h;
         blockH = imgH + spacing + NUM_BLOCK_H;
+      } else {
+        const maxW =
+          columnContentWidth(
+            colW,
+            COL_GAP,
+            isFull ? questionCols : 1,
+            NUM_WIDTH
+          ) * scale;
+        let maxH = Math.max(
+          layoutHints.minHeightMm,
+          qBottom - y - spacing - NUM_BLOCK_H
+        );
+
+        ({ w: imgW, h: imgH } = fitImageInBox(
+          img,
+          maxW,
+          maxH,
+          layoutHints.minFillRatio,
+          layoutHints.strict
+        ));
+        blockH = imgH + spacing + NUM_BLOCK_H;
+
+        while (y + blockH > qBottom && maxH > layoutHints.minHeightMm) {
+          maxH = Math.max(layoutHints.minHeightMm, maxH * 0.85);
+          ({ w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH, 0, true));
+          blockH = imgH + spacing + NUM_BLOCK_H;
+        }
       }
 
       if (!isFull && y + blockH > qBottom) {
@@ -375,6 +500,16 @@ export async function generateTestPdf(
         undefined,
         "SLOW"
       );
+
+      const blockW = isFull
+        ? pageInnerW + NUM_WIDTH
+        : colW - 1;
+      addObstacle({
+        x: drawX,
+        y: y,
+        w: blockW,
+        h: blockH,
+      });
 
       y += blockH;
 
@@ -417,6 +552,8 @@ export async function generateTestPdf(
     }
   };
 
+  await finishPageWatermark();
+
   if (settings.includeOpticalForm) {
     if (opticalPlacement === "bottom") {
       await drawOpticalAtBottom();
@@ -440,6 +577,7 @@ export async function generateTestPdf(
           "horizontal"
         );
       }
+      await finishPageWatermark();
     }
   }
 

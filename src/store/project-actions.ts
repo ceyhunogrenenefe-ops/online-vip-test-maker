@@ -1,4 +1,5 @@
 import type { PaperSettings, TestProject, TestProjectSummary } from "@/types";
+import { mergePaperSettings } from "@/types";
 import {
   createEmptyProject,
   deleteTestProject,
@@ -46,7 +47,7 @@ export async function loadProjectIntoState(
   const p = await getTestProject(id);
   if (!p) return null;
   await setCurrentProjectId(id);
-  return { draftIds: [...p.draftIds], paperSettings: { ...p.paperSettings } };
+  return { draftIds: [...p.draftIds], paperSettings: mergePaperSettings(p.paperSettings) };
 }
 
 export async function bootstrapProjects(): Promise<{
@@ -74,7 +75,7 @@ export async function bootstrapProjects(): Promise<{
   return {
     currentId,
     draftIds: [...current.draftIds],
-    paperSettings: { ...current.paperSettings },
+    paperSettings: mergePaperSettings(current.paperSettings),
     summaries: list.map(toSummary),
   };
 }

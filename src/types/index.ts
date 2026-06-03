@@ -54,6 +54,10 @@ export interface PaperSettings {
   classSection: string;
   group: string;
   spacingBetweenQuestions: boolean;
+  /** Sorular arası boşluk (mm) — boşluk seçeneği açıkken */
+  questionSpacingMm: number;
+  /** Yaprak test / deneme: PDF üst bilgisinde gösterilen açıklamalar */
+  testDescription: string;
   includeTeacherName: boolean;
   teacherName: string;
   includeOpticalForm: boolean;
@@ -66,10 +70,19 @@ export interface PaperSettings {
   opticalCustomImage?: string;
   smartPlacement: boolean;
   watermark: boolean;
+  /** text = metin filigran; logo = tek logo arka planda */
+  watermarkType: "text" | "logo";
   watermarkText: string;
   watermarkOpacity: number;
+  /** Logo görseli (data URL) */
+  watermarkLogoImage?: string;
+  /** Logo genişliği sayfa yüzdesi (20–70) */
+  watermarkLogoScale: number;
   themeColor: string;
-  paperSize: "A4" | "A3";
+  paperSize: "A4" | "A3" | "custom";
+  /** Özel kağıt boyutu (mm) — paperSize custom iken */
+  customPaperWidthMm: number;
+  customPaperHeightMm: number;
   orientation: "portrait" | "landscape";
   columns: ColumnCount;
   columnDivider: boolean;
@@ -78,6 +91,8 @@ export interface PaperSettings {
   questionScalePercent: number;
   /** true: sorular kesinlikle sütun genişliğini aşmaz */
   strictColumnFit: boolean;
+  /** true: tüm sorular aynı sütun genişliği / tutarlı yükseklik bandında çizilir */
+  uniformQuestionSize: boolean;
 }
 
 /** Kayıtlı kağıt / test taslağı — soru sırası ve ayarlar */
@@ -124,6 +139,8 @@ export const DEFAULT_PAPER_SETTINGS: PaperSettings = {
   classSection: "",
   group: "Grup Yok",
   spacingBetweenQuestions: true,
+  questionSpacingMm: 10,
+  testDescription: "",
   includeTeacherName: false,
   teacherName: "",
   includeOpticalForm: false,
@@ -131,14 +148,26 @@ export const DEFAULT_PAPER_SETTINGS: PaperSettings = {
   opticalPlacement: "bottom",
   smartPlacement: true,
   watermark: false,
+  watermarkType: "text",
   watermarkText: "Dershanem",
   watermarkOpacity: 0.12,
+  watermarkLogoScale: 45,
   themeColor: "#2563eb",
   paperSize: "A4",
+  customPaperWidthMm: 210,
+  customPaperHeightMm: 297,
   orientation: "portrait",
   columns: 2,
   columnDivider: true,
   marginCm: 1.5,
   questionScalePercent: 92,
   strictColumnFit: true,
+  uniformQuestionSize: true,
 };
+
+/** Kayıtlı projelerde eksik alanları varsayılanlarla tamamlar */
+export function mergePaperSettings(
+  stored: Partial<PaperSettings> | PaperSettings
+): PaperSettings {
+  return { ...DEFAULT_PAPER_SETTINGS, ...stored };
+}

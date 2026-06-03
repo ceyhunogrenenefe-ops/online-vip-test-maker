@@ -36,7 +36,7 @@ export default function HomePage() {
         </main>
       </div>
       <footer className="py-1 text-right pr-4 text-xs text-slate-400">
-        v1.0 · Dershanem
+        v1.0 · Online VIP Test Maker
       </footer>
     </div>
   );

@@ -3,9 +3,9 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 
 export const metadata: Metadata = {
-  title: "Dershanem VIP Test Maker",
+  title: "Online VIP Test Maker",
   description:
-    "Soru kesme, PDF sınav kağıdı ve online sınav hazırlama aracı — Dershanem",
+    "Soru kesme, PDF sınav kağıdı ve online sınav hazırlama — Dershanem VIP",
 };
 
 export default function RootLayout({
