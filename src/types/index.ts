@@ -100,6 +100,20 @@ export interface PaperSettings {
   strictColumnFit: boolean;
   /** true: tüm sorular aynı sütun genişliği / tutarlı yükseklik bandında çizilir */
   uniformQuestionSize: boolean;
+
+  /**
+   * Kurumsal föy şablonu (Online VIP Dershane). Kapalıyken eski üst bilgi
+   * aynen kullanılır; kayıtlı taslaklarda alan bulunmadığı için opsiyonel.
+   */
+  corporateTemplate?: boolean;
+  /** Rozetin alt satırı — ör. "FİZİK" */
+  subjectBranch?: string;
+  /** Konu bandı — ör. "BASINÇ VE KALDIRMA KUVVETİ"; boşsa bant çizilmez */
+  topicTitle?: string;
+  /** Kurum adının altındaki satır — ör. "YAZILIYA HAZIRLIK FÖYÜ" */
+  documentKind?: string;
+  /** Alt bilgideki kurumsal slogan */
+  footerSlogan?: string;
 }
 
 /** Kayıtlı kağıt / test taslağı — soru sırası ve ayarlar */

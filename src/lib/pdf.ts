@@ -3,6 +3,12 @@ import type { OpticalFormPlacement, PaperSettings, Question } from "@/types";
 import { renderQuestionToDataUrl } from "./question-render";
 import { registerTurkishFont, setTurkishFont } from "./pdf-font";
 import {
+  corporateHeaderHeight,
+  corporateFooterHeight,
+  drawCorporateHeader,
+  drawCorporateFooterOnAllPages,
+} from "./pdf-corporate";
+import {
   columnContentWidth,
   fitImageInBox,
   layoutHintsForColumns,
@@ -58,6 +64,8 @@ function questionSpacingMm(settings: PaperSettings, smartPack: boolean): number 
 }
 
 function headerBarHeight(settings: PaperSettings): number {
+  // Kurumsal sablon kendi yuksekligini hesaplar (konu bandi varsa daha yuksek)
+  if (settings.corporateTemplate) return corporateHeaderHeight(settings);
   const base = 30;
   if (
     (settings.paperType === "yaprak" || settings.paperType === "deneme") &&
@@ -208,7 +216,8 @@ export async function generateTestPdf(
   const usableW = pageW - margin * 2;
   const colW = (usableW - COL_GAP * (cols - 1)) / cols;
   const startY = margin + headerH;
-  const bottomLimit = pageH - margin;
+  const bottomLimit =
+    pageH - margin - (settings.corporateTemplate ? corporateFooterHeight() : 0);
   const spacing = questionSpacingMm(settings, smartPack);
   const colInnerW = columnContentWidth(colW, COL_GAP, 1, NUM_WIDTH);
   const pageInnerW = columnContentWidth(
@@ -295,7 +304,11 @@ export async function generateTestPdf(
   };
 
   const paintPageChrome = async (contentBottom = bottomLimit) => {
-    drawHeader(doc, settings, pageW, margin);
+    if (settings.corporateTemplate) {
+      drawCorporateHeader(doc, settings, pageW, margin);
+    } else {
+      drawHeader(doc, settings, pageW, margin);
+    }
     addObstacle({ x: 0, y: 0, w: pageW, h: startY });
     drawColumnDividers(
       doc,
@@ -598,6 +611,11 @@ export async function generateTestPdf(
       pageObstacles.splice(idx, 1);
       watermarkedPages.delete(idx);
     }
+  }
+
+  // Alt bilgi en sonda: bos sayfalar silindikten sonra numaralar dogru olur
+  if (settings.corporateTemplate) {
+    drawCorporateFooterOnAllPages(doc, settings, pageW, pageH, margin);
   }
 
   return doc.output("blob");
