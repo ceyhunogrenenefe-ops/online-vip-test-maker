@@ -17,6 +17,7 @@ import {
   drawCorporateHeader,
 } from "@/lib/pdf-corporate";
 import type { PaperSettings } from "@/types";
+import { loadBrandKit, cachedBrandKit } from "@/lib/brand-kit";
 
 const ORNEK = {
   schoolName: "ONLINE VIP DERSHANE",
@@ -203,6 +204,7 @@ export default function SablonOnizlemePage() {
   const uret = useCallback(async () => {
     try {
       setHata(null);
+      await loadBrandKit();
       const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
       await registerTurkishFont(doc);
       const settings = ornekAyarlar({ topicTitle: konu });
@@ -281,6 +283,11 @@ export default function SablonOnizlemePage() {
         {hata && (
           <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{hata}</p>
         )}
+
+        <p className="mt-2 text-xs text-slate-500" data-test="marka-durum">
+          Marka kaynağı: {cachedBrandKit().fromApi ? "merkezden okundu" : "varsayılan (uç nokta okunamadı)"}
+          {cachedBrandKit().logoDataUrl ? " · logo var" : " · logo yok"}
+        </p>
 
         {metin && (
           <details className="mt-4 rounded-lg border border-slate-300 bg-white p-3 text-sm">

@@ -1,6 +1,7 @@
 import type { jsPDF } from "jspdf";
 import { setTurkishFont } from "./pdf-font";
 import type { PaperSettings } from "@/types";
+import { cachedBrandKit, imageFormatOf } from "./brand-kit";
 
 /**
  * Online VIP Dershane kurumsal foy sablonu.
@@ -85,16 +86,39 @@ export function drawCorporateHeader(
 
   const y = BLOK_UST_MM;
 
-  // --- Logo kutusu ---
-  doc.setFillColor(KURUMSAL.lacivert);
-  doc.roundedRect(margin, y, LOGO_W_MM, LOGO_H_MM, 2.2, 2.2, "F");
-  doc.setTextColor(KURUMSAL.beyaz);
-  setTurkishFont(doc, "bold");
-  doc.setFontSize(19);
-  doc.text("VIP", margin + LOGO_W_MM / 2, y + 11.2, { align: "center" });
-  setTurkishFont(doc, "normal");
-  doc.setFontSize(5.4);
-  doc.text("ONLINE", margin + LOGO_W_MM / 2, y + 15.4, { align: "center" });
+  // --- Logo ---
+  // Merkezden (kocluk platformu) okunan kurumsal logo; yoksa lacivert kutu.
+  const marka = cachedBrandKit();
+  let logoCizildi = false;
+  if (marka.logoDataUrl) {
+    try {
+      const bicim = imageFormatOf(marka.logoDataUrl);
+      const olcu = doc.getImageProperties(marka.logoDataUrl);
+      const oran = olcu.width / olcu.height;
+      // Kutuya sigdir, orani koru, dikeyde ortala
+      let w = LOGO_W_MM;
+      let h = w / oran;
+      if (h > LOGO_H_MM) {
+        h = LOGO_H_MM;
+        w = h * oran;
+      }
+      doc.addImage(marka.logoDataUrl, bicim, margin, y + (LOGO_H_MM - h) / 2, w, h);
+      logoCizildi = true;
+    } catch {
+      logoCizildi = false;
+    }
+  }
+  if (!logoCizildi) {
+    doc.setFillColor(KURUMSAL.lacivert);
+    doc.roundedRect(margin, y, LOGO_W_MM, LOGO_H_MM, 2.2, 2.2, "F");
+    doc.setTextColor(KURUMSAL.beyaz);
+    setTurkishFont(doc, "bold");
+    doc.setFontSize(19);
+    doc.text("VIP", margin + LOGO_W_MM / 2, y + 11.2, { align: "center" });
+    setTurkishFont(doc, "normal");
+    doc.setFontSize(5.4);
+    doc.text("ONLINE", margin + LOGO_W_MM / 2, y + 15.4, { align: "center" });
+  }
 
   // --- Sinif / brans rozeti (sagda) ---
   const rozetMetinleri = [
@@ -129,7 +153,7 @@ export function drawCorporateHeader(
   const metinMaxW = (rozetVar ? rozetX - 5 : pageW - margin) - metinX;
   doc.setTextColor(KURUMSAL.lacivert);
   setTurkishFont(doc, "bold");
-  const kurum = buyukHarf(settings.schoolName || "ONLINE VIP DERSHANE");
+  const kurum = buyukHarf(settings.schoolName || marka.institutionName);
   metniSigdir(doc, kurum, metinMaxW, 13, 8);
   doc.text(kurum, metinX, y + 8);
 
@@ -185,7 +209,7 @@ export function drawCorporateFooter(
   doc.setFontSize(7.5);
   doc.setTextColor(KURUMSAL.gri);
 
-  const slogan = (settings.footerSlogan || "").trim();
+  const slogan = (settings.footerSlogan || cachedBrandKit().slogan || "").trim();
   if (slogan) doc.text(slogan, margin, yaziY);
 
   const marka = (settings.schoolName || "Online VIP Dershane").trim();
