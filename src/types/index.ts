@@ -36,8 +36,15 @@ export interface Question {
   pdfPage?: number;
   /** Doğru cevap — online test ve cevap anahtarı için */
   answerKey?: AnswerOption;
+  /** Soru altı / ek metin yazı tipi */
+  fontFamily?: string;
+  fontBold?: boolean;
   /** Kağıtta yerleşim — çok sütunlu modda tek soru tam sayfa genişliği */
   layoutSpan?: QuestionLayoutSpan;
+  /** PDF kırpmada kaynak bölge (sayfa üzerinde gösterim için) */
+  sourceCrop?: { x: number; y: number; width: number; height: number };
+  sourceImageWidth?: number;
+  sourceImageHeight?: number;
 }
 
 export interface QuestionSnapshot {

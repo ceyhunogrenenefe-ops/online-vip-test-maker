@@ -64,5 +64,10 @@ export function fitQuestionForPdf(
     return fitImageUniform(img, targetW, remainingH);
   }
 
+  // Kalan alana sığdır; yeni sayfa yalnızca gerçekten yetmezse
+  if (remainingH >= 14) {
+    return fitImageUniform(img, targetW, remainingH);
+  }
+
   return null;
 }

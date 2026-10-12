@@ -225,7 +225,7 @@ export async function generateTestPdf(
           settings,
           usableW,
           "horizontal"
-        ) + 10
+        ) + 6
       : 0;
   const questionBottom = () => bottomLimit - opticalReserve;
 
@@ -319,9 +319,13 @@ export async function generateTestPdf(
     y = startY;
   };
 
+  const pageHasQuestions = (pageIdx: number) =>
+    (pageObstacles[pageIdx] ?? []).some((o) => o.y >= startY - 1);
+
   const beginFullWidthRow = async () => {
     if (col !== 0) {
-      await newPage();
+      col = 0;
+      x = colX(margin, colW, 0);
       return;
     }
     if (y > startY + 2) {
@@ -528,9 +532,8 @@ export async function generateTestPdf(
     const gap = 6;
     let optY = bottomLimit - optH;
 
-    if (y + gap > optY) {
-      doc.addPage();
-      await paintPageChrome();
+    if (y + gap > optY && pageHasQuestions(currentPageIndex())) {
+      await newPage();
       optY = bottomLimit - optH;
     }
 
@@ -550,6 +553,7 @@ export async function generateTestPdf(
         "horizontal"
       );
     }
+    addObstacle({ x: margin, y: optY, w: usableW, h: optH });
   };
 
   await finishPageWatermark();
@@ -558,8 +562,7 @@ export async function generateTestPdf(
     if (opticalPlacement === "bottom") {
       await drawOpticalAtBottom();
     } else if (opticalPlacement === "separate") {
-      doc.addPage();
-      await paintPageChrome();
+      await newPage();
       const area = {
         x: margin,
         y: startY,
@@ -577,7 +580,23 @@ export async function generateTestPdf(
           "horizontal"
         );
       }
+      addObstacle({
+        x: margin,
+        y: startY,
+        w: usableW,
+        h: bottomLimit - startY,
+      });
       await finishPageWatermark();
+    }
+  }
+
+  // Soru/optik içermeyen boş sayfaları kaldır
+  for (let p = doc.getNumberOfPages(); p >= 1; p--) {
+    const idx = p - 1;
+    if (!pageHasQuestions(idx)) {
+      doc.deletePage(p);
+      pageObstacles.splice(idx, 1);
+      watermarkedPages.delete(idx);
     }
   }
 

@@ -16,6 +16,10 @@ export function QuestionEditModal({ question, onClose }: Props) {
   const updateQuestion = useAppStore((s) => s.updateQuestion);
   const [text, setText] = useState(question.overlayText ?? "");
   const [fontSize, setFontSize] = useState(question.fontSize ?? 14);
+  const [fontFamily, setFontFamily] = useState(
+    question.fontFamily ?? "Arial, sans-serif"
+  );
+  const [fontBold, setFontBold] = useState(question.fontBold ?? false);
   const [preview, setPreview] = useState(question.imageDataUrl);
   const [expanding, setExpanding] = useState(false);
   const [answerKey, setAnswerKey] = useState<AnswerOption | undefined>(
@@ -26,6 +30,8 @@ export function QuestionEditModal({ question, onClose }: Props) {
     updateQuestion(question.id, {
       overlayText: text,
       fontSize,
+      fontFamily,
+      fontBold,
       imageDataUrl: preview,
       answerKey,
     });
@@ -102,6 +108,28 @@ export function QuestionEditModal({ question, onClose }: Props) {
             onChange={setAnswerKey}
             label="Cevap anahtarı (doğru şık)"
           />
+
+          <label className="block text-sm">
+            Yazı tipi
+            <select
+              value={fontFamily}
+              onChange={(e) => setFontFamily(e.target.value)}
+              className="mt-1 w-full rounded border px-3 py-2"
+            >
+              <option value="Arial, sans-serif">Arial</option>
+              <option value="Segoe UI, Arial, sans-serif">Segoe UI</option>
+              <option value="Times New Roman, serif">Times</option>
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={fontBold}
+              onChange={(e) => setFontBold(e.target.checked)}
+            />
+            Kalın yazı
+          </label>
 
           <label className="block text-sm">
             Yazı boyutu

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, FilePlus, X } from "lucide-react";
+import { ChevronDown, FilePlus, Settings, X } from "lucide-react";
 
 export interface PdfSession {
   id: string;
@@ -14,6 +14,8 @@ interface Props {
   onSelect: (id: string) => void;
   onAdd: () => void;
   onRemove?: (id: string) => void;
+  onSettings?: () => void;
+  onClose?: () => void;
 }
 
 export function PdfSourceBar({
@@ -22,23 +24,37 @@ export function PdfSourceBar({
   onSelect,
   onAdd,
   onRemove,
+  onSettings,
+  onClose,
 }: Props) {
   if (sessions.length === 0) return null;
 
   const active = sessions.find((s) => s.id === activeId);
+  const displayName = active?.name ?? "PDF seçin";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-      <span className="text-xs font-medium text-slate-500">PDF:</span>
-      <div className="relative min-w-[200px] flex-1">
+    <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 shadow-sm">
+      {onSettings && (
+        <button
+          type="button"
+          onClick={onSettings}
+          className="rounded p-2 text-slate-500 hover:bg-slate-100 hover:text-dershanem-blue"
+          title="Kırpma ayarları"
+        >
+          <Settings size={20} />
+        </button>
+      )}
+
+      <div className="relative min-w-0 flex-1">
         <select
           value={activeId ?? ""}
           onChange={(e) => onSelect(e.target.value)}
-          className="w-full appearance-none rounded-lg border border-slate-300 bg-slate-50 py-2 pl-3 pr-8 text-sm font-medium"
+          className="w-full appearance-none truncate rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3 pr-8 text-sm font-medium text-slate-800"
+          title={displayName}
         >
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.name} ({s.pageCount} sayfa)
+              {s.name}
             </option>
           ))}
         </select>
@@ -47,24 +63,36 @@ export function PdfSourceBar({
           className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
         />
       </div>
+
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex shrink-0 items-center justify-center rounded-lg bg-dershanem-blue p-2 text-white hover:bg-blue-700"
+        title="PDF ekle"
+      >
+        <FilePlus size={18} />
+      </button>
+
       {active && onRemove && sessions.length > 1 && (
         <button
           type="button"
           onClick={() => onRemove(active.id)}
-          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-          title="Listeden kaldır"
+          className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+          title="Kaldır"
         >
-          <X size={16} />
+          <X size={18} />
         </button>
       )}
-      <button
-        type="button"
-        onClick={onAdd}
-        className="flex items-center gap-1 rounded-lg border border-dershanem-blue px-3 py-2 text-sm font-medium text-dershanem-blue hover:bg-dershanem-sky"
-      >
-        <FilePlus size={16} />
-        PDF Ekle
-      </button>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          title="Oturumu kapat"
+        >
+          <X size={18} />
+        </button>
+      )}
     </div>
   );
 }

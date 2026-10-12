@@ -170,3 +170,63 @@ export async function detectQuestionsOnImage(
 
   return regions.map((r, i) => ({ ...r, id: `q-${i + 1}` }));
 }
+
+function cropsOverlap(a: PixelCrop, b: PixelCrop, pad = 12): boolean {
+  return !(
+    a.x + a.width + pad <= b.x ||
+    b.x + b.width + pad <= a.x ||
+    a.y + a.height + pad <= b.y ||
+    b.y + b.height + pad <= a.y
+  );
+}
+
+/** Kayıtlı sorulardan sonra bir sonraki soru bölgesini tahmin eder */
+export async function suggestNextQuestionCrop(
+  imageSrc: string,
+  lastCrop: PixelCrop,
+  occupied: PixelCrop[] = []
+): Promise<PixelCrop | null> {
+  const all = await detectQuestionsOnImage(imageSrc);
+  const minY = lastCrop.y + lastCrop.height * 0.25;
+
+  const below = all
+    .filter((r) => r.crop.y >= minY)
+    .filter((r) => !occupied.some((o) => cropsOverlap(o, r.crop)))
+    .sort((a, b) => a.crop.y - b.crop.y || a.crop.x - b.crop.x);
+
+  if (below[0]) return below[0].crop;
+
+  const unused = all
+    .filter((r) => !occupied.some((o) => cropsOverlap(o, r.crop)))
+    .sort((a, b) => a.crop.y - b.crop.y || a.crop.x - b.crop.x);
+
+  return unused[0]?.crop ?? null;
+}
+
+export function stackCropBelow(
+  lastCrop: PixelCrop,
+  imageWidth: number,
+  imageHeight: number
+): PixelCrop | null {
+  const gap = Math.max(8, Math.round(imageHeight * 0.008));
+  const nextY = lastCrop.y + lastCrop.height + gap;
+  const cropH = Math.min(lastCrop.height, imageHeight - nextY - gap);
+  if (cropH < 40 || nextY >= imageHeight - 40) return null;
+  return clampCropLike(
+    { x: lastCrop.x, y: nextY, width: lastCrop.width, height: cropH },
+    imageWidth,
+    imageHeight
+  );
+}
+
+function clampCropLike(
+  crop: PixelCrop,
+  imageWidth: number,
+  imageHeight: number
+): PixelCrop {
+  const width = Math.max(28, Math.min(crop.width, imageWidth));
+  const height = Math.max(28, Math.min(crop.height, imageHeight));
+  const x = Math.max(0, Math.min(crop.x, imageWidth - width));
+  const y = Math.max(0, Math.min(crop.y, imageHeight - height));
+  return { x, y, width, height };
+}

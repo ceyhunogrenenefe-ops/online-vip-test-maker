@@ -31,10 +31,13 @@ const HANDLES: { id: ResizeHandle; className: string; cursor: string }[] = [
 ];
 
 const accentStyles = {
-  amber: "border-amber-400 bg-amber-400/15 ring-2 ring-amber-300/80",
-  green: "border-green-400/70 bg-green-400/10",
-  blue: "border-dershanem-blue bg-dershanem-blue/10 ring-2 ring-dershanem-blue/40",
+  amber: "border-2 border-dashed border-white bg-black/10 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]",
+  green: "border-2 border-green-500 bg-green-400/10",
+  blue: "border-2 border-dashed border-white bg-black/10 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]",
 };
+
+const handleClass =
+  "absolute z-10 h-2.5 w-2.5 border border-slate-500 bg-slate-300 shadow-sm";
 
 export function ResizableCropBox({
   crop,
@@ -110,7 +113,7 @@ export function ResizableCropBox({
 
   return (
     <div
-      className={`absolute border-2 ${accentStyles[accent]}`}
+      className={`absolute ${accentStyles[accent]}`}
       style={{ left, top, width, height, zIndex }}
     >
       <div
@@ -125,15 +128,12 @@ export function ResizableCropBox({
           key={id}
           role="button"
           tabIndex={0}
-          className={`absolute z-10 h-3.5 w-3.5 rounded-full border-2 border-white bg-dershanem-blue shadow ${className}`}
+          className={`${handleClass} ${className}`}
           style={{ cursor }}
           onPointerDown={(e) => onPointerDown(id, e)}
           aria-label={`Boyut: ${id}`}
         />
       ))}
-      <div className="pointer-events-none absolute -top-6 left-0 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
-        Kenarlardan çekerek boyutlandırın
-      </div>
     </div>
   );
 }
