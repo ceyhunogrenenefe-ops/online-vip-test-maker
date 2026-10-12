@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kurumsal Föy Şablonu — Tasarım Önizlemesi</title>
+<!--
+  Online VIP Dershane — kurumsal föy şablonu tasarım referansı.
+  Calisma zamani etkisi yoktur; yalnizca tasarimin onaylanmasi icindir.
+  Olculer mm cinsinden A4 (210x297) ile birebir oranlidir.
+-->
+<style>
+  :root{
+    --lacivert:#173b70;
+    --lacivert-koyu:#0f2a52;
+    --kirmizi:#d72d42;
+    --mavi-acik:#eef4fa;
+    --mavi-kutu:#edf5fb;
+    --mavi-serit:#dce9f6;
+    --cizgi:#9ab2cf;
+    --gri:#64748b;
+    --metin:#374151;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#e8edf3;font-family:"Segoe UI",system-ui,Arial,sans-serif;padding:28px 16px;color:var(--metin);}
+  .aciklama{max-width:210mm;margin:0 auto 20px;font-size:13px;line-height:1.7;color:#475569;}
+  .aciklama h1{font-size:17px;color:var(--lacivert);margin-bottom:6px;}
+  .aciklama code{background:#fff;border:1px solid #cbd5e1;border-radius:4px;padding:1px 5px;font-size:12px;}
+
+  /* --- A4 sayfa --- */
+  .sayfa{
+    width:210mm;height:297mm;margin:0 auto 24px;background:#fff;
+    position:relative;overflow:hidden;
+    box-shadow:0 6px 28px rgba(15,42,82,.18);
+  }
+
+  /* Ust kurumsal serit */
+  .ust-serit{height:6mm;background:var(--lacivert);}
+  .ust-serit-kirmizi{height:1.6mm;background:var(--kirmizi);}
+
+  /* Header */
+  .header{display:flex;align-items:center;gap:5mm;padding:4mm 12mm 0;}
+  .logo-kutu{
+    width:26mm;height:19mm;border-radius:2.5mm;background:var(--lacivert);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#fff;flex-shrink:0;
+  }
+  .logo-kutu .vip{font-size:7mm;font-weight:800;letter-spacing:.5px;line-height:1;}
+  .logo-kutu .alt{font-size:2.3mm;letter-spacing:1.6px;margin-top:.8mm;opacity:.9;}
+  .kurum{flex:1;min-width:0;}
+  .kurum .ad{font-size:4.6mm;font-weight:800;color:var(--lacivert);letter-spacing:-.2px;}
+  .kurum .tur{font-size:3mm;color:var(--gri);margin-top:.8mm;letter-spacing:.4px;}
+  .rozet{
+    background:var(--mavi-acik);border:.3mm solid #d7e3f0;border-radius:2.5mm;
+    padding:2.4mm 4mm;text-align:center;flex-shrink:0;
+  }
+  .rozet .sinif{font-size:3.4mm;font-weight:800;color:var(--lacivert);}
+  .rozet .brans{font-size:3mm;color:var(--lacivert);opacity:.8;margin-top:.5mm;}
+
+  .header-cizgi{height:.5mm;background:var(--kirmizi);margin:3.5mm 12mm 0;}
+
+  /* Konu bandi */
+  .konu-bandi{
+    margin:3.5mm 12mm 0;background:var(--mavi-acik);border-radius:2mm;
+    padding:3mm;text-align:center;
+    font-size:4mm;font-weight:800;color:var(--lacivert);letter-spacing:.3px;
+  }
+
+  /* Icerik — iki sutun */
+  .icerik{
+    position:relative;margin:4mm 12mm 0;height:208mm;
+    display:grid;grid-template-columns:1fr 1fr;gap:8mm;
+  }
+  .icerik::before{
+    content:"";position:absolute;left:50%;top:0;bottom:0;width:.3mm;
+    background:var(--cizgi);opacity:.75;
+  }
+  .sutun{display:flex;flex-direction:column;gap:3.5mm;min-width:0;}
+
+  /* Bilesenler */
+  .bolum-basligi{
+    background:var(--lacivert);color:#fff;border-radius:1.8mm;
+    padding:2.2mm 3mm;font-size:3.4mm;font-weight:700;letter-spacing:.3px;
+  }
+  .paragraf{font-size:3.1mm;line-height:1.65;color:var(--metin);}
+  .formul{
+    background:var(--mavi-kutu);border-radius:2mm;padding:4mm 3mm;text-align:center;
+    font-size:5.4mm;font-weight:800;color:var(--lacivert);font-family:"Cambria Math",Georgia,serif;
+  }
+  .formul .kesir{display:inline-flex;flex-direction:column;vertical-align:middle;
+    font-size:3.6mm;line-height:1.15;margin:0 .6mm;}
+  .formul .kesir span:first-child{border-bottom:.35mm solid var(--lacivert);padding:0 1mm;}
+  .soru-basligi{
+    background:var(--mavi-serit);border-radius:1.6mm;padding:1.8mm 3mm;
+    font-size:3.1mm;font-weight:800;color:var(--lacivert);letter-spacing:.3px;
+  }
+  .cizgili{display:flex;flex-direction:column;gap:3.4mm;margin-top:2mm;}
+  .cizgili i{display:block;height:.25mm;background:#d5dfe9;}
+  .uyari{
+    background:#fff1f1;border:.3mm solid #f4d6d9;border-left:1mm solid var(--kirmizi);
+    border-radius:2mm;padding:2.6mm 3mm;
+  }
+  .uyari b{display:block;font-size:3.1mm;color:#bd2539;margin-bottom:1mm;letter-spacing:.3px;}
+  .uyari p{font-size:2.9mm;line-height:1.55;}
+  .bilgi{
+    background:#f1f8f4;border:.3mm solid #cfe7d9;border-left:1mm solid #2e9e63;
+    border-radius:2mm;padding:2.6mm 3mm;
+  }
+  .bilgi b{display:block;font-size:3.1mm;color:#1f7a4a;margin-bottom:1mm;}
+  .bilgi p{font-size:2.9mm;line-height:1.55;}
+  .sekil{
+    background:#f5f8fc;border-radius:2mm;padding:2mm;display:flex;
+    align-items:center;justify-content:center;
+  }
+  .sekil svg{width:100%;height:auto;display:block;}
+
+  /* Filigran */
+  .filigran{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;
+  }
+  .filigran span{
+    font-size:26mm;font-weight:800;color:var(--lacivert);opacity:.055;
+    transform:rotate(-35deg);letter-spacing:2px;white-space:nowrap;
+  }
+
+  /* Footer */
+  .footer{position:absolute;left:12mm;right:12mm;bottom:8mm;}
+  .footer .cizgi{height:.5mm;background:var(--kirmizi);margin-bottom:2.2mm;}
+  .footer .satir{display:flex;align-items:center;justify-content:space-between;}
+  .footer .slogan{font-size:2.8mm;color:var(--gri);}
+  .footer .marka{font-size:2.8mm;color:var(--gri);}
+  .footer .sayfa-no{
+    font-size:3.2mm;font-weight:800;color:var(--lacivert);
+    background:var(--mavi-acik);border-radius:1.4mm;padding:1mm 2.6mm;
+  }
+  @media print{body{background:#fff;padding:0;} .aciklama{display:none;} .sayfa{box-shadow:none;margin:0;}}
+</style>
+</head>
+<body>
+
+<div class="aciklama">
+  <h1>Kurumsal Föy Şablonu — tasarım önizlemesi</h1>
+  <p>Ölçüler A4 (210×297 mm) ile birebir orantılıdır; <code>mm</code> biriminde yazıldığı için tarayıcıdan yazdırıldığında da aynı yerleşimi verir. Bu dosya yalnızca tasarımın onaylanması içindir, uygulamanın çalışmasına dahil değildir.</p>
+</div>
+
+<div class="sayfa">
+  <div class="ust-serit"></div>
+  <div class="ust-serit-kirmizi"></div>
+
+  <div class="header">
+    <div class="logo-kutu">
+      <div class="vip">VIP</div>
+      <div class="alt">ONLINE</div>
+    </div>
+    <div class="kurum">
+      <div class="ad">ONLINE VIP DERSHANE</div>
+      <div class="tur">YAZILIYA HAZIRLIK FÖYÜ</div>
+    </div>
+    <div class="rozet">
+      <div class="sinif">9. SINIF</div>
+      <div class="brans">FİZİK</div>
+    </div>
+  </div>
+  <div class="header-cizgi"></div>
+
+  <div class="konu-bandi">BASINÇ VE KALDIRMA KUVVETİ</div>
+
+  <div class="filigran"><span>ONLINE VIP</span></div>
+
+  <div class="icerik">
+    <!-- SOL SÜTUN -->
+    <div class="sutun">
+      <div class="bolum-basligi">KATI BASINCI</div>
+      <p class="paragraf">Basınç, bir yüzeye dik olarak uygulanan kuvvetin, kuvvetin uygulandığı yüzey alanına oranıdır.</p>
+      <div class="formul">
+        P =
+        <span class="kesir"><span>F</span><span>A</span></span>
+      </div>
+      <div class="soru-basligi">ÖRNEK SORU 01</div>
+      <p class="paragraf">Yüzey alanı yarıya indirilen bir cismin yüzeye uyguladığı basınç nasıl değişir? Açıklayınız.</p>
+      <div class="cizgili"><i></i><i></i><i></i><i></i></div>
+      <div class="bilgi">
+        <b>HATIRLATMA</b>
+        <p>Kuvvet artarsa basınç artar, yüzey alanı artarsa basınç azalır.</p>
+      </div>
+    </div>
+
+    <!-- SAĞ SÜTUN -->
+    <div class="sutun">
+      <div class="bolum-basligi">SIVI BASINCI</div>
+      <div class="sekil">
+        <svg viewBox="0 0 150 76" xmlns="http://www.w3.org/2000/svg">
+          <path d="M34 12 V60 H116 V12" fill="none" stroke="#173b70" stroke-width="2.2"/>
+          <rect x="35" y="33" width="80" height="27" fill="#9cdee3" opacity=".75"/>
+          <path d="M28 33 H122" stroke="#4b9ea9" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <path d="M75 34 V58 M70 52 L75 58 L80 52" stroke="#173b70" fill="none" stroke-width="1.5"/>
+          <text x="80" y="46" font-size="8" fill="#173b70" font-family="Georgia,serif" font-style="italic">h</text>
+          <text x="124" y="36" font-size="6.5" fill="#64748b">sıvı yüzeyi</text>
+        </svg>
+      </div>
+      <div class="formul">P = h · d · g</div>
+      <div class="soru-basligi">ÖRNEK SORU 02</div>
+      <p class="paragraf">Sıvı derinliği iki katına çıkarıldığında kabın tabanındaki basınç nasıl değişir?</p>
+      <div class="cizgili"><i></i><i></i><i></i></div>
+      <div class="uyari">
+        <b>DİKKAT!</b>
+        <p>Sıvı basıncı kabın şekline ve sıvının miktarına bağlı değildir; yalnızca derinliğe ve yoğunluğa bağlıdır.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="cizgi"></div>
+    <div class="satir">
+      <span class="slogan">Olduğunuz yerden, olmak istediğiniz yere.</span>
+      <span class="marka">Online VIP Dershane</span>
+      <span class="sayfa-no">01</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
