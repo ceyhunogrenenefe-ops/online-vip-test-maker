@@ -101,15 +101,29 @@ export async function POST(req: Request) {
     '[{"stem":"soru kökü","options":[{"label":"A","text":"..."},{"label":"B","text":"..."},{"label":"C","text":"..."},{"label":"D","text":"..."}],"answer":"A","explanation":"kısa çözüm"}]',
   ].join("\n");
 
+  /**
+   * Başlıklar düz nesne yerine Headers ile kuruluyor ve istek
+   * önbelleğe alınmıyor.
+   *
+   * Neden: Anthropic 401 "x-api-key header is required" döndü, oysa
+   * başlık koşulsuz gönderiliyor ve değerin biçimi ölçüldü (110 karakter,
+   * sk-ant- öneki, geçersiz karakter yok). Next uygulama yönlendiricisi
+   * global fetch'i sarmalıyor; düz nesne başlıkların sarmalayıcıda
+   * kaybolmadığını Headers ile kurarak kesinleştiriyoruz. no-store de
+   * model yanıtının önbelleğe alınmasını engelliyor — bu çağrının
+   * önbelleklenmesi zaten istenmez.
+   */
+  const basliklar = new Headers();
+  basliklar.set("content-type", "application/json");
+  basliklar.set("x-api-key", anahtar);
+  basliklar.set("anthropic-version", "2023-06-01");
+  if (WORKSPACE_ID) basliklar.set("anthropic-workspace-id", WORKSPACE_ID);
+
   try {
     const yanit = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": anahtar,
-        "anthropic-version": "2023-06-01",
-        ...(WORKSPACE_ID ? { "anthropic-workspace-id": WORKSPACE_ID } : {}),
-      },
+      cache: "no-store",
+      headers: basliklar,
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 2000,
@@ -149,10 +163,46 @@ export async function POST(req: Request) {
        * "anahtar yanlış mı, ortam değişkeni mi bozuk" sorusu Vercel'de
        * sensitive değişkenler okunamadığı için yanıtlanamıyor.
        */
-      const ek =
+      let ek =
         yanit.status === 401 || yanit.status === 403
           ? ` [anahtar: ${anahtarBicimi(anahtarHam)}]`
           : "";
+
+      /**
+       * "x-api-key header is required" hem başlığın hiç ulaşmaması hem de
+       * başka bir nedenle olabilir. Suçun bizde mi (istek kurulumu) yoksa
+       * anahtarda mı olduğunu ayırmak için aynı başlıkla küçük bir GET
+       * atıyoruz:
+       *   "...header is required" tekrar gelirse  -> başlık gerçekten gitmiyor
+       *   "invalid x-api-key" gelirse             -> anahtar reddediliyor
+       *   başarılı olursa                         -> anahtar geçerli, sorun
+       *                                              /v1/messages isteğinde
+       */
+      if (yanit.status === 401 && /header is required/i.test(ayrinti)) {
+        try {
+          const sonda = await fetch("https://api.anthropic.com/v1/models?limit=1", {
+            method: "GET",
+            cache: "no-store",
+            headers: basliklar,
+          });
+          const sondaMetin = await sonda.text().catch(() => "");
+          let sondaAyrinti = "";
+          try {
+            const sj = JSON.parse(sondaMetin) as { error?: { message?: string } };
+            sondaAyrinti = String(sj.error?.message || "").slice(0, 120);
+          } catch {
+            /* JSON degilse ayrinti yok */
+          }
+          console.error("[soru-uret sonda]", sonda.status, sondaMetin.slice(0, 200));
+          ek +=
+            ` [sonda /v1/models: ${sonda.status}` +
+            (sondaAyrinti ? ` ${sondaAyrinti}` : " basarili") +
+            "]";
+        } catch (se) {
+          ek += ` [sonda basarisiz: ${se instanceof Error ? se.message : "bilinmiyor"}]`;
+        }
+      }
+
       return hata((ayrinti ? `${kisa} — ${ayrinti}` : kisa) + ek, 502);
     }
 
