@@ -19,6 +19,7 @@ interface AppState {
     | "crop"
     | "editor"
     | "online"
+    | "foy"
     | "advanced";
   currentProjectId: string | null;
   projects: TestProjectSummary[];

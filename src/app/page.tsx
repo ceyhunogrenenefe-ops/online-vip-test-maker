@@ -6,6 +6,7 @@ import { QuestionWorkspace } from "@/components/home/QuestionWorkspace";
 import { CropWorkspace } from "@/components/crop/CropWorkspace";
 import { QuestionEditor } from "@/components/editor/QuestionEditor";
 import { OnlineExamsPanel } from "@/components/online/OnlineExamsPanel";
+import { FoyWorkspace } from "@/components/foy/FoyWorkspace";
 import { TestProjectsBar } from "@/components/layout/TestProjectsBar";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -20,6 +21,8 @@ export default function HomePage() {
         return <QuestionEditor />;
       case "online":
         return <OnlineExamsPanel />;
+      case "foy":
+        return <FoyWorkspace />;
       default:
         return <QuestionWorkspace />;
     }
