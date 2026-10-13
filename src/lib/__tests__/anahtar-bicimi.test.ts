@@ -8,7 +8,7 @@ const ORNEK = "sk-ant-api03-" + "A1b2C3d4E5f6G7h8".repeat(4);
 test("saglikli anahtari dogru ozetler", () => {
   const r = anahtarBicimi(ORNEK);
   assert.match(r, /uzunluk=77/);
-  assert.match(r, /onek=sk-ant-/);
+  assert.match(r, /onek=sk-ant-api03-/);
   assert.doesNotMatch(r, /gecersiz-karakter/);
 });
 
@@ -17,7 +17,7 @@ test("ozet anahtarin HICBIR parcasini icermez", () => {
   // Anahtardan 8 karakterlik her dilim ozette gecmemeli
   for (let i = 0; i + 8 <= ORNEK.length; i++) {
     const dilim = ORNEK.slice(i, i + 8);
-    if (dilim === "sk-ant-a") continue; // onek bayragi kasitli
+    if ("sk-ant-api03-".includes(dilim)) continue; // tur oneki kasitli
     assert.ok(!r.includes(dilim), `ozet anahtar parcasi sizdirdi: ${dilim}`);
   }
 });
@@ -50,4 +50,29 @@ test("tanimsiz deger cokmez", () => {
 
 test("ters bolu iceren deger gecersiz sayilmaz (yazdirilabilir ascii)", () => {
   assert.doesNotMatch(anahtarBicimi("sk-ant-" + TB + "x"), /gecersiz-karakter/);
+});
+
+test("tur oneki Console anahtarini yonetici anahtarindan ayirir", () => {
+  const api = anahtarBicimi("sk-ant-api03-" + "x".repeat(95));
+  const admin = anahtarBicimi("sk-ant-admin01-" + "x".repeat(95));
+  const oat = anahtarBicimi("sk-ant-oat01-" + "x".repeat(95));
+  assert.match(api, /onek=sk-ant-api03-/);
+  assert.match(admin, /onek=sk-ant-admin01-/);
+  assert.match(oat, /onek=sk-ant-oat01-/);
+});
+
+test("tur oneki gizli bolumden HICBIR SEY almaz", () => {
+  const gizli = "ZZZZZZZZZZZZZZZZZZZZ";
+  const r = anahtarBicimi("sk-ant-api03-" + gizli);
+  assert.ok(!r.includes("Z"), "gizli bolumden karakter sizdi: " + r);
+});
+
+test("cok uzun tur segmenti kirpilir", () => {
+  const r = anahtarBicimi("sk-ant-" + "A".repeat(40) + "-gizli");
+  const m = /onek=([^,]+)/.exec(r);
+  assert.ok(m && m[1].length <= 21, "onek kirpilmadi: " + (m && m[1]));
+});
+
+test("tiresiz sk-ant- degeri cokmez", () => {
+  assert.match(anahtarBicimi("sk-ant-abc"), /onek=sk-ant-\(tur-yok\)/);
 });
