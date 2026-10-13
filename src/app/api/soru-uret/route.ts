@@ -19,6 +19,14 @@ export const runtime = "nodejs";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5";
 
+/**
+ * Kuruluş düzeyinde (çalışma alanına bağlı olmayan) bir API anahtarı
+ * kullanılıyorsa Anthropic `anthropic-workspace-id` başlığını zorunlu
+ * tutuyor ve aksi halde 400 dönüyor. Çalışma alanına bağlı anahtarda
+ * bu değişken gereksizdir.
+ */
+const WORKSPACE_ID = process.env.ANTHROPIC_WORKSPACE_ID?.trim();
+
 function hata(mesaj: string, kod = 400) {
   return NextResponse.json({ error: mesaj }, { status: kod });
 }
@@ -86,6 +94,7 @@ export async function POST(req: Request) {
         "content-type": "application/json",
         "x-api-key": anahtar,
         "anthropic-version": "2023-06-01",
+        ...(WORKSPACE_ID ? { "anthropic-workspace-id": WORKSPACE_ID } : {}),
       },
       body: JSON.stringify({
         model: MODEL,
@@ -96,15 +105,30 @@ export async function POST(req: Request) {
 
     if (!yanit.ok) {
       const metin = await yanit.text().catch(() => "");
-      // Anahtarı ya da ayrıntıyı istemciye sızdırmadan anlaşılır mesaj
+      console.error("[soru-uret]", yanit.status, metin.slice(0, 400));
+
+      /**
+       * Yapılandırma hatasının kendisi gizli bilgi değil ve asıl sorunu
+       * yalnızca o anlatıyor. "Model servisi 400 döndü" demek, çalışma
+       * alanı başlığının eksik olduğunu bulmayı gereksiz yere zorlaştırdı.
+       * Bu yüzden Anthropic'in açıklamasını geçiriyoruz — anahtar bu
+       * metinde yer almaz.
+       */
+      let ayrinti = "";
+      try {
+        const j = JSON.parse(metin) as { error?: { message?: string } };
+        ayrinti = String(j.error?.message || "").slice(0, 300);
+      } catch {
+        /* JSON değilse ayrıntı verilmez */
+      }
+
       const kisa =
         yanit.status === 401
           ? "API anahtarı geçersiz"
           : yanit.status === 429
             ? "İstek sınırına takıldı, biraz sonra deneyin"
             : `Model servisi ${yanit.status} döndü`;
-      console.error("[soru-uret]", yanit.status, metin.slice(0, 300));
-      return hata(kisa, 502);
+      return hata(ayrinti ? `${kisa} — ${ayrinti}` : kisa, 502);
     }
 
     const j = (await yanit.json()) as {
