@@ -8,13 +8,28 @@
  * söylemek zorunda. Burada yalnızca uzunluk ve biçim bayrakları var —
  * anahtarın hiçbir parçası yazılmaz.
  */
+/**
+ * Anahtarın TÜR öneki — "sk-ant-api03-", "sk-ant-admin01-", "sk-ant-oat01-".
+ *
+ * Bu segment gizli değil: aynı türdeki tüm anahtarlarda birebir aynı sabit,
+ * rastgele bölümden önce gelir. Ama hangi tür anahtarın yapıştırıldığını
+ * söyler ve asıl soruyu yanıtlar: Console API anahtarı mı, yoksa
+ * /v1/messages'ın kabul etmediği bir yönetici veya OAuth belirteci mi.
+ * Üçüncü tireden sonrası ASLA alınmaz; o kısım anahtarın kendisidir.
+ */
+function turOneki(t: string): string {
+  if (!t.startsWith("sk-ant-")) return "beklenmeyen";
+  const parcalar = t.split("-");
+  // ["sk", "ant", "<tur>", "<gizli...>"]
+  if (parcalar.length < 4) return "sk-ant-(tur-yok)";
+  const tur = parcalar[2].slice(0, 12);
+  return `sk-ant-${tur}-`;
+}
+
 export function anahtarBicimi(ham: string | undefined): string {
   const h = ham ?? "";
   const t = h.trim();
-  const bayraklar = [
-    `uzunluk=${t.length}`,
-    `onek=${t.startsWith("sk-ant-") ? "sk-ant-" : "beklenmeyen"}`,
-  ];
+  const bayraklar = [`uzunluk=${t.length}`, `onek=${turOneki(t)}`];
   if (h !== t) bayraklar.push("basta/sonda-bosluk-vardi");
   // Başlık değerine giremeyen karakterler (satır sonu, sekme, Unicode)
   const gecersiz = [...t].filter((c) => c.charCodeAt(0) < 33 || c.charCodeAt(0) > 126);
