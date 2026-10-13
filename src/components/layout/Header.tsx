@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FileText,
   Home,
   Building2,
   Crop,
@@ -13,7 +14,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 
 const navItems: {
-  id: "home" | "crop" | "editor" | "online";
+  id: "home" | "crop" | "editor" | "online" | "foy";
   label: string;
   icon: React.ElementType;
 }[] = [
@@ -21,6 +22,7 @@ const navItems: {
   { id: "crop", label: "Kırpma Aracı", icon: Crop },
   { id: "editor", label: "Soru Editörü", icon: Pencil },
   { id: "online", label: "Online Testlerim", icon: Globe },
+  { id: "foy", label: "Föy Oluştur", icon: FileText },
 ];
 
 export function Header() {

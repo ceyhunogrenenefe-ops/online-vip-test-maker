@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { anahtarBicimi } from "@/lib/anahtar-bicimi";
 import {
   MAX_SORU,
   jsonAyikla,
@@ -32,10 +33,23 @@ function hata(mesaj: string, kod = 400) {
 }
 
 export async function POST(req: Request) {
-  const anahtar = process.env.ANTHROPIC_API_KEY?.trim();
+  const anahtarHam = process.env.ANTHROPIC_API_KEY;
+  const anahtar = anahtarHam?.trim();
   if (!anahtar) {
     return hata(
       "ANTHROPIC_API_KEY tanımlı değil. Vercel > Project > Environment Variables bölümünden ekleyin.",
+      503
+    );
+  }
+
+  /**
+   * Başlığa giremeyecek bir karakter varsa fetch TypeError atar ve hata
+   * "Soru üretilemedi" diye görünür. Önden yakalayıp ne olduğunu söylüyoruz.
+   */
+  if ([...anahtar].some((c) => c.charCodeAt(0) < 33 || c.charCodeAt(0) > 126)) {
+    return hata(
+      `ANTHROPIC_API_KEY başlık olarak gönderilemeyecek karakter içeriyor (${anahtarBicimi(anahtarHam)}). ` +
+        "Vercel'de değişkeni silip anahtarı tırnaksız, boşluksuz, tek satır olarak yeniden ekleyin.",
       503
     );
   }
@@ -128,7 +142,18 @@ export async function POST(req: Request) {
           : yanit.status === 429
             ? "İstek sınırına takıldı, biraz sonra deneyin"
             : `Model servisi ${yanit.status} döndü`;
-      return hata(ayrinti ? `${kisa} — ${ayrinti}` : kisa, 502);
+
+      /**
+       * Kimlik hatalarında anahtarın BİÇİMİNİ de bildiriyoruz. Anahtarın
+       * kendisi yazılmaz; yalnızca uzunluk ve biçim bayrakları. Bunsuz
+       * "anahtar yanlış mı, ortam değişkeni mi bozuk" sorusu Vercel'de
+       * sensitive değişkenler okunamadığı için yanıtlanamıyor.
+       */
+      const ek =
+        yanit.status === 401 || yanit.status === 403
+          ? ` [anahtar: ${anahtarBicimi(anahtarHam)}]`
+          : "";
+      return hata((ayrinti ? `${kisa} — ${ayrinti}` : kisa) + ek, 502);
     }
 
     const j = (await yanit.json()) as {

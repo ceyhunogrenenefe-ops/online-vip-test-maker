@@ -64,3 +64,34 @@ export async function saveDraftQuestionIds(ids: string[]): Promise<void> {
 export async function getDraftQuestionIds(): Promise<string[]> {
   return (await get<string[]>(DRAFT_KEY)) ?? [];
 }
+
+/* ------------------------------------------------------------------ */
+/* Föy taslağı                                                         */
+/* ------------------------------------------------------------------ */
+
+const FOY_ANAHTAR = "foy-taslak";
+
+/**
+ * Föy taslağı — otomatik kayıt.
+ *
+ * Öğretmen 40 bloklu bir föy kurup sekmeyi yenilediğinde her şeyi
+ * kaybediyordu. Bloklar formül görselleri (PNG data URL) içerebildiği
+ * için localStorage yetmez; IndexedDB kullanılıyor.
+ */
+export type FoyTaslak = {
+  bloklar: unknown[];
+  kunye: { sinif: string; brans: string; konu: string; tur: string };
+  guncelleme: number;
+};
+
+export async function saveFoyTaslak(t: FoyTaslak): Promise<void> {
+  await set(FOY_ANAHTAR, t);
+}
+
+export async function getFoyTaslak(): Promise<FoyTaslak | undefined> {
+  return get(FOY_ANAHTAR);
+}
+
+export async function deleteFoyTaslak(): Promise<void> {
+  await del(FOY_ANAHTAR);
+}

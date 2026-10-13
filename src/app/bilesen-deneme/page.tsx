@@ -16,35 +16,15 @@ import {
   drawCorporateFooterOnAllPages,
   drawCorporateHeader,
 } from "@/lib/pdf-corporate";
-import { blokCiz, sutunaYerlestir } from "@/lib/pdf-blocks";
+import { foyPdfOlustur, foyTeshisMesaji } from "@/lib/foy-pdf";
+import { yapistirmayiBelgeye } from "@/lib/foy-icerik";
+import type { PaperSettings } from "@/types";
 import type { DocBlock } from "@/lib/pdf-blocks";
 import { renderLatexToPng } from "@/lib/latex-render";
 import { cleanFromClipboard } from "@/lib/paste-clean";
 import type { PasteBlock } from "@/lib/paste-clean";
 
 /** Yapıştırma bloklarını föy bloklarına çevirir. */
-async function yapistirmayiBelgeye(bloklar: PasteBlock[]): Promise<DocBlock[]> {
-  const out: DocBlock[] = [];
-  let soruNo = 1;
-  for (const b of bloklar) {
-    if (b.kind === "heading") out.push({ kind: "sectionTitle", text: b.text });
-    else if (b.kind === "paragraph") out.push({ kind: "paragraph", runs: b.runs });
-    else if (b.kind === "list") out.push({ kind: "list", ordered: b.ordered, items: b.items });
-    else if (b.kind === "table") out.push({ kind: "table", rows: b.rows });
-    else if (b.kind === "question")
-      out.push({ kind: "question", no: soruNo++, stem: b.stem, options: b.options });
-    else if (b.kind === "formula") {
-      try {
-        const r = await renderLatexToPng(b.latex, { olcek: 4 });
-        out.push({ kind: "formula", render: r, latex: b.latex });
-      } catch {
-        out.push({ kind: "paragraph", runs: [{ text: b.latex }] });
-      }
-    }
-  }
-  return out;
-}
-
 export default function BilesenDenemePage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -132,9 +112,8 @@ export default function BilesenDenemePage() {
     async (bloklar: DocBlock[]) => {
       setHata(null);
       try {
-        await loadBrandKit();
-        const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-        await registerTurkishFont(doc);
+        // Yerlesim artik ortak kutuphanede: uretim foy editoru ile
+        // bu demo ayni kodu kullanmazsa ikisi zamanla ayrisir.
         const settings = {
           corporateTemplate: true,
           schoolName: "ONLINE VIP DERSHANE",
@@ -142,49 +121,9 @@ export default function BilesenDenemePage() {
           classSection: "9. SINIF",
           subjectBranch: "FİZİK",
           topicTitle: "Basınç ve Kaldırma Kuvveti",
-        } as Parameters<typeof drawCorporateHeader>[1];
-
-        const pageW = doc.internal.pageSize.getWidth();
-        const pageH = doc.internal.pageSize.getHeight();
-        const margin = 12;
-        const bosluk = 8;
-        const sutunW = (pageW - margin * 2 - bosluk) / 2;
-        const altSinir = pageH - margin - corporateFooterHeight();
-
-        let kalan = bloklar;
-        let sayfa = 0;
-        let guvenlik = 0;
-        while (kalan.length && guvenlik++ < 40) {
-          if (sayfa > 0) doc.addPage();
-          drawCorporateHeader(doc, settings, pageW, margin);
-          const ustY = corporateHeaderHeight(settings);
-
-          // Ortadaki ayırıcı
-          doc.setDrawColor("#9ab2cf");
-          doc.setLineWidth(0.3);
-          doc.line(pageW / 2, ustY, pageW / 2, altSinir);
-
-          for (const sutun of [0, 1]) {
-            if (!kalan.length) break;
-            const x = margin + sutun * (sutunW + bosluk);
-            const y = sutunaYerlestir(doc, kalan, sutunW, ustY, altSinir);
-            if (!y.yerlesen.length) {
-              // Tek blok bile sığmıyor: sonsuz döngüyü önlemek için zorla çiz
-              const zorla = kalan[0];
-              blokCiz(doc, zorla, x, ustY, sutunW);
-              kalan = kalan.slice(1);
-              continue;
-            }
-            let imlec = ustY;
-            for (const { blok } of y.yerlesen) {
-              imlec = blokCiz(doc, blok, x, imlec, sutunW);
-            }
-            kalan = y.kalan;
-          }
-          sayfa++;
-        }
-
-        drawCorporateFooterOnAllPages(doc, settings, pageW, pageH, margin);
+        } as unknown as PaperSettings;
+        const { doc, teshis } = await foyPdfOlustur(bloklar, settings);
+        const sayfa = teshis.sayfa;
         const blob = doc.output("blob");
 
         // Denetim: bilesenler PDF'e gercekten girdi mi, metin secilebilir mi
@@ -211,7 +150,11 @@ export default function BilesenDenemePage() {
           if (eski) URL.revokeObjectURL(eski);
           return URL.createObjectURL(blob);
         });
-        setBilgi(`${sayfa} sayfa · ${bloklar.length} bileşen`);
+        const uyari = foyTeshisMesaji(teshis);
+        setBilgi(
+          `${sayfa} sayfa · ${teshis.cizilen}/${teshis.verilen} bileşen` +
+            (uyari ? ` · ${uyari}` : "")
+        );
       } catch (e) {
         setHata(e instanceof Error ? e.message : String(e));
       }
@@ -224,8 +167,11 @@ export default function BilesenDenemePage() {
       e.preventDefault();
       const r = cleanFromClipboard(e.clipboardData);
       const b = await yapistirmayiBelgeye(r.blocks);
-      setDisaridan(b);
-      setBilgi(`Yapıştırılan içerikten ${b.length} bileşen üretildi`);
+      setDisaridan(b.bloklar);
+      setBilgi(
+        `Yapıştırılan içerikten ${b.bloklar.length} bileşen üretildi` +
+          (b.uyarilar.length ? ` · ${b.uyarilar.join(" · ")}` : "")
+      );
     },
     []
   );
