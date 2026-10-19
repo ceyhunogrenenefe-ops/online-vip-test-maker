@@ -154,15 +154,34 @@ export function drawCorporateHeader(
   doc.setTextColor(KURUMSAL.lacivert);
   setTurkishFont(doc, "bold");
   const kurum = buyukHarf(settings.schoolName || marka.institutionName);
-  metniSigdir(doc, kurum, metinMaxW, 13, 8);
-  doc.text(kurum, metinX, y + 8);
-
+  const yil = settings.academicYear?.trim();
   const turMetni = (settings.documentKind || settings.testName || "").trim();
-  if (turMetni) {
+  if (yil) {
+    // Üç satır logo kutusunun (19 mm) içinde kalır. Yıl yoksa eski iki satır aynen durur.
+    metniSigdir(doc, kurum, metinMaxW, 11, 8);
+    doc.text(kurum, metinX, y + 6.2);
     setTurkishFont(doc, "normal");
     doc.setTextColor(KURUMSAL.gri);
-    metniSigdir(doc, buyukHarf(turMetni), metinMaxW, 8.5, 6);
-    doc.text(buyukHarf(turMetni), metinX, y + 14.2);
+    const yilSatiri = buyukHarf(
+      yil.includes("EĞİTİM") ? yil : `${yil} EĞİTİM ÖĞRETİM YILI`
+    );
+    metniSigdir(doc, yilSatiri, metinMaxW, 7.2, 6);
+    doc.text(yilSatiri, metinX, y + 10.8);
+    if (turMetni) {
+      doc.setTextColor(KURUMSAL.lacivert);
+      setTurkishFont(doc, "bold");
+      metniSigdir(doc, buyukHarf(turMetni), metinMaxW, 7.4, 6);
+      doc.text(buyukHarf(turMetni), metinX, y + 15.6);
+    }
+  } else {
+    metniSigdir(doc, kurum, metinMaxW, 13, 8);
+    doc.text(kurum, metinX, y + 8);
+    if (turMetni) {
+      setTurkishFont(doc, "normal");
+      doc.setTextColor(KURUMSAL.gri);
+      metniSigdir(doc, buyukHarf(turMetni), metinMaxW, 8.5, 6);
+      doc.text(buyukHarf(turMetni), metinX, y + 14.2);
+    }
   }
 
   // --- Kirmizi ayirici ---
@@ -215,6 +234,20 @@ export function drawCorporateFooter(
   const marka = (settings.schoolName || "Online VIP Dershane").trim();
   doc.text(marka, pageW / 2, yaziY, { align: "center" });
 
+  const ek: string[] = [];
+  if (settings.includeTeacherName && settings.teacherName?.trim()) {
+    ek.push(settings.teacherName.trim());
+  }
+  if (settings.website?.trim()) ek.push(settings.website.trim());
+  if (ek.length) {
+    doc.setFontSize(6.5);
+    setTurkishFont(doc, "normal");
+    const ekMetin = ek.join("  ·  ");
+    const maxW = pageW - margin * 2 - 18;
+    metniSigdir(doc, ekMetin, maxW, 6.5, 5.5);
+    doc.text(ekMetin, margin, yaziY + 4.2);
+  }
+
   // Sayfa numarasi rozeti
   const no = String(sayfaNo).padStart(2, "0");
   doc.setFontSize(8.5);
@@ -231,6 +264,28 @@ export function drawCorporateFooter(
   doc.setTextColor(0, 0, 0);
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.2);
+}
+
+/**
+ * Sayfa ortasında tek satırlık açık filigran.
+ * Mevcut çok kopyalı filigran soru okunurluğunu düşürdüğü için föyde kullanılmaz.
+ * jsPDF sürümünde GState varsa gerçek saydamlık, yoksa açık gri kullanılır.
+ */
+export function drawFoyFiligran(
+  doc: jsPDF,
+  pageW: number,
+  pageH: number,
+  metin = "ONLINE VIP DERSHANE"
+) {
+  const gState = (doc as jsPDF & { GState?: (opts: { opacity: number }) => unknown }).GState;
+  const saydam = typeof gState === "function";
+  if (saydam) doc.setGState(gState({ opacity: 0.07 }) as never);
+  doc.setTextColor(saydam ? KURUMSAL.lacivert : "#d5dee8");
+  setTurkishFont(doc, "bold");
+  doc.setFontSize(20);
+  doc.text(metin, pageW / 2, pageH / 2, { align: "center", angle: 32 });
+  if (saydam) doc.setGState(gState({ opacity: 1 }) as never);
+  doc.setTextColor(0, 0, 0);
 }
 
 /** Tum sayfalara alt bilgi yazar — sayfa sayisi ancak sonda bellidir. */

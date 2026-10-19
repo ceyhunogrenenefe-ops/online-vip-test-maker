@@ -107,5 +107,9 @@ export function blokEtiketi(b: DocBlock): string {
       return "Görsel";
     case "spacer":
       return `Boşluk (${b.heightMm} mm)`;
+    case "pageBreak":
+      return "Sayfa sonu";
+    case "columnBreak":
+      return "Sütun sonu";
   }
 }

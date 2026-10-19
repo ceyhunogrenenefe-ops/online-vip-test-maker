@@ -26,7 +26,7 @@ export type YerlesenBlok = {
 };
 
 export type FoySayfaPlani = {
-  /** Her sayfada iki sütun */
+  /** Sayfadaki sütunlar. Tek sütun modunda dizi uzunluğu 1'dir. */
   sutunlar: YerlesenBlok[][];
 };
 
@@ -64,31 +64,48 @@ export function foyYerlesimPlani(
 
   let i = 0;
   while (i < bloklar.length && sayfalar.length < secenek.maksSayfa) {
-    const sutunlar: YerlesenBlok[][] = [];
-    for (let s = 0; s < sutunSayisi; s++) {
-      const sutun: YerlesenBlok[] = [];
-      let y = secenek.ustY;
-      while (i < bloklar.length) {
-        const blok = bloklar[i];
-        const h = olc(blok);
-        if (y + h > secenek.altSinir) {
-          // Sütun boşken bile sığmıyorsa blok bir sütundan uzun demektir.
-          // Atlanırsa öğretmenin föyünden içerik eksilir; bu yüzden
-          // sığdırmadan çizilir ve zorlanan olarak bildirilir.
-          if (sutun.length === 0) {
-            sutun.push({ blok, indeks: i, y, zorlandi: true });
-            zorlanan.push(i);
-            i++;
-          }
-          break;
-        }
-        sutun.push({ blok, indeks: i, y, zorlandi: false });
-        y += h;
+    const sutunlar: YerlesenBlok[][] = Array.from({ length: sutunSayisi }, () => []);
+    let s = 0;
+    let y = secenek.ustY;
+    let sayfaKapandi = false;
+
+    while (i < bloklar.length && !sayfaKapandi) {
+      const blok = bloklar[i];
+
+      // Öğretmenin koyduğu kesmeler otomatik akıştan önce gelir ve silinmez.
+      if (blok.kind === "pageBreak") {
         i++;
+        break;
       }
-      sutunlar.push(sutun);
-      if (i >= bloklar.length) break;
+      if (blok.kind === "columnBreak") {
+        i++;
+        s += 1;
+        y = secenek.ustY;
+        if (s >= sutunSayisi) sayfaKapandi = true;
+        continue;
+      }
+
+      const h = olc(blok);
+      if (y + h > secenek.altSinir) {
+        // Sütun boşken bile sığmıyorsa blok bir sütundan uzundur.
+        // Atlanırsa içerik eksilir; sığdırmadan çizilir ve bildirilir.
+        // Eski davranış: zorlanan bloktan sonra aynı sütuna devam edilmez.
+        if (sutunlar[s].length === 0) {
+          sutunlar[s].push({ blok, indeks: i, y, zorlandi: true });
+          zorlanan.push(i);
+          i++;
+        }
+        s += 1;
+        y = secenek.ustY;
+        if (s >= sutunSayisi) sayfaKapandi = true;
+        continue;
+      }
+
+      sutunlar[s].push({ blok, indeks: i, y, zorlandi: false });
+      y += h;
+      i++;
     }
+
     sayfalar.push({ sutunlar });
   }
 

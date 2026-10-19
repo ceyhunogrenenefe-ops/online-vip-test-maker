@@ -32,9 +32,9 @@ export default function HomePage() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <div className="flex flex-1 flex-col md:flex-row">
-        <PaperSidebar />
+        {activeView === "foy" ? null : <PaperSidebar />}
         <main className="flex flex-1 flex-col overflow-hidden bg-slate-100">
-          <TestProjectsBar />
+          {activeView === "foy" ? null : <TestProjectsBar />}
           {mainContent()}
         </main>
       </div>

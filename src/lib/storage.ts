@@ -80,9 +80,83 @@ const FOY_ANAHTAR = "foy-taslak";
  */
 export type FoyTaslak = {
   bloklar: unknown[];
-  kunye: { sinif: string; brans: string; konu: string; tur: string };
+  kunye: {
+    sinif: string;
+    brans: string;
+    konu: string;
+    tur: string;
+    dokumanAdi?: string;
+    egitimYili?: string;
+    donem?: string;
+    yazili?: string;
+    ogretmen?: string;
+    website?: string;
+    sinifNo?: number;
+  };
   guncelleme: number;
+  ogeler?: unknown[];
+  tasarim?: unknown;
+  belgeId?: string;
+  ad?: string;
+  /** Elle kaydedilen önceki haller. Otomatik kayıt bunları şişirmez. */
+  surumler?: { guncelleme: number; ogeler: unknown[]; ad: string }[];
 };
+
+export type FoyBelgeOzet = {
+  id: string;
+  ad: string;
+  guncelleme: number;
+  arsiv: boolean;
+};
+
+const FOY_LISTE = "foy-belgeler";
+const FOY_BELGE = "foy-belge:";
+const FOY_BANKA = "foy-banka:";
+
+export async function foyBelgeListele(): Promise<FoyBelgeOzet[]> {
+  return (await get<FoyBelgeOzet[]>(FOY_LISTE)) ?? [];
+}
+
+export async function foyBelgeOku(id: string): Promise<FoyTaslak | undefined> {
+  return get<FoyTaslak>(`${FOY_BELGE}${id}`);
+}
+
+export async function foyBelgeYaz(id: string, t: FoyTaslak, ozet: FoyBelgeOzet): Promise<void> {
+  await set(`${FOY_BELGE}${id}`, t);
+  const liste = await foyBelgeListele();
+  const diger = liste.filter((b) => b.id !== id);
+  await set(FOY_LISTE, [ozet, ...diger].sort((a, b) => b.guncelleme - a.guncelleme));
+}
+
+export type FoyBankaKaydi = {
+  id: string;
+  ders: string;
+  sinif: string;
+  konu: string;
+  zorluk: string;
+  tip: string;
+  blok: unknown;
+  olusturma: number;
+};
+
+export async function foyBankaListele(): Promise<FoyBankaKaydi[]> {
+  const allKeys = await keys();
+  const bKeys = allKeys.filter(
+    (k) => typeof k === "string" && k.startsWith(FOY_BANKA)
+  ) as string[];
+  const items = await Promise.all(bKeys.map((k) => get<FoyBankaKaydi>(k)));
+  return items
+    .filter((x): x is FoyBankaKaydi => !!x)
+    .sort((a, b) => b.olusturma - a.olusturma);
+}
+
+export async function foyBankaKaydet(k: FoyBankaKaydi): Promise<void> {
+  await set(`${FOY_BANKA}${k.id}`, k);
+}
+
+export async function foyBankaSil(id: string): Promise<void> {
+  await del(`${FOY_BANKA}${id}`);
+}
 
 export async function saveFoyTaslak(t: FoyTaslak): Promise<void> {
   await set(FOY_ANAHTAR, t);

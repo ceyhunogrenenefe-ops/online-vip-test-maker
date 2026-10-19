@@ -80,6 +80,30 @@ test("bos girdi bos plan uretir", () => {
   assert.equal(plan.dusen.length, 0);
 });
 
+test("sayfa sonu otomatik akisi keser ve silinmez", () => {
+  const bloklar: DocBlock[] = [blok(40), { kind: "pageBreak" }, blok(40)];
+  const plan = foyYerlesimPlani(bloklar, olc, SECENEK);
+  assert.equal(plan.sayfalar.length, 2);
+  assert.equal(plan.sayfalar[0].sutunlar[0].length, 1);
+  assert.equal(plan.sayfalar[1].sutunlar[0][0].indeks, 2);
+  assert.equal(plan.dusen.length, 0);
+  assert.equal(planBlokSayisi(plan), 2, "sayfa sonu icerik sayilmaz");
+});
+
+test("sutun sonu sonraki sutuna gecer", () => {
+  const bloklar: DocBlock[] = [blok(40), { kind: "columnBreak" }, blok(40)];
+  const plan = foyYerlesimPlani(bloklar, olc, SECENEK);
+  assert.equal(plan.sayfalar.length, 1);
+  assert.equal(plan.sayfalar[0].sutunlar[0].length, 1);
+  assert.equal(plan.sayfalar[0].sutunlar[1][0].indeks, 2);
+});
+
+test("tek sutun modu dolunca yeni sayfa acar", () => {
+  const plan = foyYerlesimPlani([blok(200), blok(200)], olc, { ...SECENEK, sutunSayisi: 1 });
+  assert.equal(plan.sayfalar.length, 2);
+  assert.equal(plan.sayfalar[0].sutunlar.length, 1);
+});
+
 test("indeksler kaynak siraya sadik kalir", () => {
   const plan = foyYerlesimPlani(Array.from({ length: 7 }, () => blok(90)), olc, SECENEK);
   const hepsi = plan.sayfalar.flatMap((s) => s.sutunlar.flat()).map((x) => x.indeks);

@@ -1,15 +1,19 @@
 import { jsPDF } from "jspdf";
-import { registerTurkishFont } from "./pdf-font";
+import { registerTurkishFont, setTurkishFont } from "./pdf-font";
 import {
   KURUMSAL,
   corporateFooterHeight,
   corporateHeaderHeight,
   drawCorporateFooterOnAllPages,
   drawCorporateHeader,
+  drawFoyFiligran,
 } from "./pdf-corporate";
 import { blokCiz, blokYuksekligi, type DocBlock } from "./pdf-blocks";
 import { foyYerlesimPlani, planBlokSayisi } from "./foy-yerlesim";
-import { loadBrandKit } from "./brand-kit";
+import { cachedBrandKit, loadBrandKit } from "./brand-kit";
+import { cevapAnahtariSatirlari, foyBaskiBloklari } from "./foy-baski";
+import type { FoyTasarim } from "./foy-kunye";
+import { drawPageWatermark } from "./pdf-watermark";
 import type { PaperSettings } from "@/types";
 
 /**
@@ -41,9 +45,30 @@ export const FOY_OLCU = {
   maksSayfa: 40,
 } as const;
 
-export function foySutunGenisligi(pageW: number): number {
-  return (pageW - FOY_OLCU.kenar * 2 - FOY_OLCU.sutunBoslugu) / 2;
+export function foySutunGenisligi(
+  pageW: number,
+  sutun = 2,
+  kenar: number = FOY_OLCU.kenar,
+  bosluk: number = FOY_OLCU.sutunBoslugu
+): number {
+  const n = Math.max(1, sutun);
+  if (n === 1) return pageW - kenar * 2;
+  return (pageW - kenar * 2 - bosluk * (n - 1)) / n;
 }
+
+export type FoyCiktiSecenegi = {
+  sutunSayisi?: 1 | 2;
+  yon?: "portrait" | "landscape";
+  kenarMm?: number;
+  soruAraligiMm?: number;
+  cozum?: FoyTasarim["cozum"];
+  cozumSatir?: number;
+  filigran?: boolean;
+  /** true ise kurum logosu (yüklüyse) kullanılır; logo yoksa metin filigranı kalır. */
+  filigranLogo?: boolean;
+  surum?: "ogrenci" | "ogretmen";
+  cevaplar?: { blok: DocBlock; cevap?: string; cozum?: string; puan?: number }[];
+};
 
 /** Teşhiste bildirilecek bir sorun var mı */
 export function foyTeshisSorunlu(t: FoyTeshis): boolean {
@@ -76,35 +101,52 @@ export function foyTeshisMesaji(t: FoyTeshis): string | null {
  */
 export async function foyPdfOlustur(
   bloklar: DocBlock[],
-  settings: PaperSettings
+  settings: PaperSettings,
+  secenek: FoyCiktiSecenegi = {}
 ): Promise<FoyPdfSonuc> {
   await loadBrandKit();
-  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const sutunSayisi = secenek.sutunSayisi === 1 ? 1 : 2;
+  const kenar = secenek.kenarMm ?? FOY_OLCU.kenar;
+  const doc = new jsPDF({
+    unit: "mm",
+    format: "a4",
+    orientation: secenek.yon === "landscape" ? "landscape" : "portrait",
+  });
   await registerTurkishFont(doc);
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const sutunW = foySutunGenisligi(pageW);
+  const sutunW = foySutunGenisligi(pageW, sutunSayisi, kenar, FOY_OLCU.sutunBoslugu);
   const ustY = corporateHeaderHeight(settings);
-  const altSinir = pageH - FOY_OLCU.kenar - corporateFooterHeight();
+  const altSinir = pageH - kenar - corporateFooterHeight();
+  const aralik = Math.max(0, secenek.soruAraligiMm ?? 0);
+  const baski = foyBaskiBloklari(bloklar, {
+    cozum: secenek.cozum ?? "yok",
+    cozumSatir: secenek.cozumSatir ?? 4,
+  });
 
   const plan = foyYerlesimPlani(
-    bloklar,
-    (b) => blokYuksekligi(doc, b, sutunW),
-    { ustY, altSinir, maksSayfa: FOY_OLCU.maksSayfa, sutunSayisi: 2 }
+    baski,
+    (b) => blokYuksekligi(doc, b, sutunW) + (b.kind === "question" ? aralik : 0),
+    { ustY, altSinir, maksSayfa: FOY_OLCU.maksSayfa, sutunSayisi }
   );
+
+  const logo = secenek.filigranLogo ? cachedBrandKit().logoDataUrl : undefined;
 
   plan.sayfalar.forEach((sayfa, si) => {
     if (si > 0) doc.addPage();
-    drawCorporateHeader(doc, settings, pageW, FOY_OLCU.kenar);
+    drawCorporateHeader(doc, settings, pageW, kenar);
+    if (secenek.filigran && !logo) drawFoyFiligran(doc, pageW, pageH);
 
-    // Sütunları ayıran orta çizgi
-    doc.setDrawColor(KURUMSAL.maviCizgi);
-    doc.setLineWidth(0.3);
-    doc.line(pageW / 2, ustY, pageW / 2, altSinir);
+    if (sutunSayisi > 1) {
+      doc.setDrawColor(KURUMSAL.maviCizgi);
+      doc.setLineWidth(0.3);
+      const orta = kenar + sutunW + FOY_OLCU.sutunBoslugu / 2;
+      doc.line(orta, ustY, orta, altSinir);
+    }
 
     sayfa.sutunlar.forEach((sutun, ci) => {
-      const x = FOY_OLCU.kenar + ci * (sutunW + FOY_OLCU.sutunBoslugu);
+      const x = kenar + ci * (sutunW + FOY_OLCU.sutunBoslugu);
       for (const yerlesen of sutun) {
         blokCiz(doc, yerlesen.blok, x, yerlesen.y, sutunW);
       }
@@ -114,10 +156,36 @@ export async function foyPdfOlustur(
   // Hiç blok yoksa bile tek sayfalık boş föy üretilir: başlık ve alt
   // bilgi öğretmene şablonun doğru kurulduğunu gösterir.
   if (plan.sayfalar.length === 0) {
-    drawCorporateHeader(doc, settings, pageW, FOY_OLCU.kenar);
+    drawCorporateHeader(doc, settings, pageW, kenar);
+    if (secenek.filigran && !logo) drawFoyFiligran(doc, pageW, pageH);
   }
 
-  drawCorporateFooterOnAllPages(doc, settings, pageW, pageH, FOY_OLCU.kenar);
+  if (secenek.filigran && logo) {
+    const toplam = doc.getNumberOfPages();
+    for (let p = 1; p <= toplam; p++) {
+      doc.setPage(p);
+      await drawPageWatermark(
+        doc,
+        {
+          ...settings,
+          watermark: true,
+          watermarkType: "logo",
+          watermarkLogoImage: logo,
+          watermarkOpacity: 0.08,
+          watermarkLogoScale: 42,
+        },
+        pageW,
+        pageH,
+        { pageNumber: p, margin: kenar, contentTop: ustY, contentBottom: altSinir }
+      );
+    }
+  }
+
+  if (secenek.surum === "ogretmen") {
+    cevapSayfasiCiz(doc, settings, secenek.cevaplar ?? [], kenar);
+  }
+
+  drawCorporateFooterOnAllPages(doc, settings, pageW, pageH, kenar);
 
   return {
     doc,
@@ -126,7 +194,47 @@ export async function foyPdfOlustur(
       cizilen: planBlokSayisi(plan),
       zorlanan: plan.zorlanan,
       dusen: plan.dusen,
-      sayfa: Math.max(1, plan.sayfalar.length),
+      sayfa: Math.max(1, doc.getNumberOfPages()),
     },
   };
 }
+
+/** Öğretmen sürümü. Cevabı olmayan soruya cevap yazılmaz. */
+function cevapSayfasiCiz(
+  doc: jsPDF,
+  settings: PaperSettings,
+  ogeler: { blok: DocBlock; cevap?: string; cozum?: string; puan?: number }[],
+  kenar: number
+) {
+  const satirlar = cevapAnahtariSatirlari(ogeler);
+  if (!satirlar.length) return;
+  doc.addPage();
+  const pageW = doc.internal.pageSize.getWidth();
+  drawCorporateHeader(doc, { ...settings, topicTitle: "CEVAP ANAHTARI" }, pageW, kenar);
+  let y = corporateHeaderHeight({ ...settings, topicTitle: "CEVAP ANAHTARI" });
+  const pageH = doc.internal.pageSize.getHeight();
+  const alt = pageH - kenar - corporateFooterHeight();
+    setTurkishFont(doc, "normal");
+    doc.setFontSize(9);
+    doc.setTextColor("#1e293b");
+  for (const s of satirlar) {
+    const parcalar = [
+      `Soru ${String(s.no).padStart(2, "0")}: ${s.cevap}`,
+      s.puan ? `Puan: ${s.puan}` : "",
+      s.cozum ? `Çözüm: ${s.cozum}` : "",
+    ].filter(Boolean);
+    const satirlarMetin = doc.splitTextToSize(parcalar.join("  ·  "), pageW - kenar * 2) as string[];
+    const h = satirlarMetin.length * 4.4 + 2;
+    if (y + h > alt) {
+      doc.addPage();
+      drawCorporateHeader(doc, { ...settings, topicTitle: "CEVAP ANAHTARI" }, pageW, kenar);
+      y = corporateHeaderHeight({ ...settings, topicTitle: "CEVAP ANAHTARI" });
+      setTurkishFont(doc, "normal");
+      doc.setFontSize(9);
+      doc.setTextColor("#1e293b");
+    }
+    doc.text(satirlarMetin, kenar, y + 4);
+    y += h;
+  }
+}
+

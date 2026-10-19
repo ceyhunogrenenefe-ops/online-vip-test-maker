@@ -10,10 +10,14 @@
 
 import { NextResponse } from "next/server";
 import { anahtarBicimi } from "@/lib/anahtar-bicimi";
+import { MEB_KAYNAK, MEB_YIL, mebKazanimBul, sinifNo } from "@/lib/meb-kazanim";
 import {
   MAX_SORU,
   jsonAyikla,
   sorulariDogrula,
+  sorulariDogrulaGenis,
+  yzKaliteUyarilari,
+  type UretilenSoru,
 } from "@/lib/soru-uret-ayristir";
 
 export const runtime = "nodejs";
@@ -30,6 +34,28 @@ const WORKSPACE_ID = process.env.ANTHROPIC_WORKSPACE_ID?.trim();
 
 function hata(mesaj: string, kod = 400) {
   return NextResponse.json({ error: mesaj }, { status: kod });
+}
+
+/** Aynı talimat kısa süre içinde tekrarlanırsa modele yeniden gidilmez. Anahtar içermez. */
+const onbellek = new Map<string, { zaman: number; sorular: UretilenSoru[] }>();
+const ONBELLEK_MS = 10 * 60 * 1000;
+
+function onbellekten(talimat: string): UretilenSoru[] | null {
+  const kayit = onbellek.get(talimat);
+  if (!kayit) return null;
+  if (Date.now() - kayit.zaman > ONBELLEK_MS) {
+    onbellek.delete(talimat);
+    return null;
+  }
+  return kayit.sorular;
+}
+
+function onbellegeYaz(talimat: string, sorular: UretilenSoru[]) {
+  if (onbellek.size > 40) {
+    const ilk = onbellek.keys().next().value;
+    if (ilk) onbellek.delete(ilk);
+  }
+  onbellek.set(talimat, { zaman: Date.now(), sorular });
 }
 
 export async function POST(req: Request) {
@@ -59,8 +85,13 @@ export async function POST(req: Request) {
     sinif?: string;
     brans?: string;
     konu?: string;
+    altKonu?: string;
+    kazanim?: string;
     adet?: number;
-    zorluk?: "kolay" | "orta" | "zor";
+    zorluk?: string;
+    soruTipi?: string;
+    hazirlik?: string;
+    komut?: string;
   };
   try {
     govde = await req.json();
@@ -69,37 +100,95 @@ export async function POST(req: Request) {
   }
 
   const kaynak = (govde.kaynakSoru || "").trim();
-  if (!kaynak) return hata("Kaynak soru gerekli");
+  const komut = (govde.komut || "").trim();
+  const zengin = Boolean(komut || govde.soruTipi || govde.altKonu || govde.kazanim || govde.hazirlik);
+  if (!kaynak && !komut) return hata("Kaynak soru veya komut gerekli");
+  if (!zengin && !kaynak) return hata("Kaynak soru gerekli");
   if (kaynak.length > 4000) return hata("Kaynak soru çok uzun");
+  if (komut.length > 2000) return hata("Komut çok uzun");
 
   const adet = Math.min(MAX_SORU, Math.max(1, Number(govde.adet) || 3));
   const zorluk = govde.zorluk || "orta";
+  const tip = (govde.soruTipi || "Çoktan seçmeli").trim();
+  const resmiSatir = mebKazanimBul(sinifNo(govde.sinif || ""), govde.brans || "", govde.kazanim || "");
+  const resmi = Boolean(resmiSatir);
+  const kazanimSatiri = resmiSatir
+    ? [
+        `Resmî tablo: ODSGM ${MEB_YIL} 1. dönem konu soru dağılım tablosu.`,
+        `Kaynak: ${MEB_KAYNAK}`,
+        `Seçilen öğrenme çıktısı bu tabloda kayıtlıdır: ${resmiSatir.kazanim}`,
+        `Ünite: ${resmiSatir.unite || "-"}`,
+        `Konu: ${resmiSatir.konu || "-"}`,
+        `1. yazılı senaryo soru sayıları: ${resmiSatir.sinav1.length ? resmiSatir.sinav1.join(", ") : "bu yazılı için tabloda yok"}`,
+        "Soruyu bu öğrenme çıktısının sınırında yaz.",
+        "Ürettiğin sorunun MEB tarafından onaylandığını söyleme.",
+      ].join("\n")
+    : "MEB uyumu iddiasında bulunma. Seçilen metin resmî kazanım tablosunda yok.";
 
-  const talimat = [
-    "Sen Türkiye'de bir dershanede çalışan deneyimli bir öğretmensin.",
-    "Sana verilen ÖRNEK SORUYA benzer, aynı kazanımı ölçen ALTERNATİF sorular yazacaksın.",
-    "",
-    "Kurallar:",
-    "- Örnek soruyu kopyalama; sayıları, bağlamı ve ifadeleri değiştir.",
-    "- Aynı konuyu ve aynı zorluk seviyesini koru.",
-    "- MEB müfredatına ve yeni nesil senaryo temelli soru anlayışına uygun yaz.",
-    "- Her soruda 4 şık olsun (A, B, C, D) ve yalnızca biri doğru olsun.",
-    "- Çeldiriciler mantıklı olsun; rastgele sayı yazma.",
-    "- Türkçe yazım ve noktalama kurallarına uy.",
-    "- Emin olmadığın bir bilgiyi uydurma.",
-    "",
-    `Sınıf: ${govde.sinif || "belirtilmedi"}`,
-    `Branş: ${govde.brans || "belirtilmedi"}`,
-    `Konu: ${govde.konu || "belirtilmedi"}`,
-    `Zorluk: ${zorluk}`,
-    `Üretilecek soru sayısı: ${adet}`,
-    "",
-    "ÖRNEK SORU:",
-    kaynak,
-    "",
-    "Yanıtı YALNIZCA şu JSON dizisi olarak ver, başka hiçbir şey yazma:",
-    '[{"stem":"soru kökü","options":[{"label":"A","text":"..."},{"label":"B","text":"..."},{"label":"C","text":"..."},{"label":"D","text":"..."}],"answer":"A","explanation":"kısa çözüm"}]',
-  ].join("\n");
+  const talimat = zengin
+    ? [
+        "Sen Türkiye'de bir dershanede çalışan deneyimli bir öğretmensin.",
+        "Öğretmenin isteğine göre SORU TASLAĞI yaz. Taslak doğrudan yayımlanmayacak; öğretmen onaylayacak.",
+        "",
+        "Kurallar:",
+        "- Emin olmadığın sayı, formül veya bilgiyi uydurma. Emin değilsen answer alanını boş bırak.",
+        `- ${kazanimSatiri}`,
+        "- Öğrenci adı, numara veya kişisel bilgi isteme ve yazma.",
+        "- Türkçe yazım kurallarına uy.",
+        tip === "Çoktan seçmeli"
+          ? "- 4 şık (A B C D) yaz ve answer alanında yalnızca bir doğru şıkkın harfini ver."
+          : tip === "Doğru / yanlış"
+            ? "- İki şık yaz: Doğru ve Yanlış. answer bu ikisinden biri olsun."
+            : "- options dizisini boş bırak. answer kısa doğru cevap olsun; emin değilsen boş string yaz.",
+        "- Sorunun çözümü için gerekli veri eksik kalmasın.",
+        "",
+        `Sınıf: ${govde.sinif || "belirtilmedi"}`,
+        `Ders: ${govde.brans || "belirtilmedi"}`,
+        `Konu: ${govde.konu || "belirtilmedi"}`,
+        `Alt konu: ${govde.altKonu || "belirtilmedi"}`,
+        `Kazanım: ${resmiSatir ? resmiSatir.kazanim : govde.kazanim || "yok"}`,
+        `Zorluk: ${zorluk}`,
+        `Soru tipi: ${tip}`,
+        `Yazılıya hazırlık düzeyi: ${govde.hazirlik || "belirtilmedi"}`,
+        `Üretilecek soru sayısı: ${adet}`,
+        komut ? `\nÖĞRETMENİN KOMUTU:\n${komut}` : "",
+        kaynak ? `\nÖRNEK / KAYNAK SORU (kopyalama, sayı ve bağlamı değiştir):\n${kaynak}` : "",
+        "",
+        "Yanıtı YALNIZCA JSON dizi olarak ver:",
+        '[{"stem":"...","options":[{"label":"A","text":"..."}],"answer":"...","explanation":"kısa çözüm"}]',
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : [
+        "Sen Türkiye'de bir dershanede çalışan deneyimli bir öğretmensin.",
+        "Sana verilen ÖRNEK SORUYA benzer, aynı kazanımı ölçen ALTERNATİF sorular yazacaksın.",
+        "",
+        "Kurallar:",
+        "- Örnek soruyu kopyalama; sayıları, bağlamı ve ifadeleri değiştir.",
+        "- Aynı konuyu ve aynı zorluk seviyesini koru.",
+        "- Yeni nesil senaryo temelli soru anlayışına uygun yaz.",
+        "- Her soruda 4 şık olsun (A, B, C, D) ve yalnızca biri doğru olsun.",
+        "- Çeldiriciler mantıklı olsun; rastgele sayı yazma.",
+        "- Türkçe yazım ve noktalama kurallarına uy.",
+        "- Emin olmadığın bir bilgiyi uydurma.",
+        "",
+        `Sınıf: ${govde.sinif || "belirtilmedi"}`,
+        `Branş: ${govde.brans || "belirtilmedi"}`,
+        `Konu: ${govde.konu || "belirtilmedi"}`,
+        `Zorluk: ${zorluk}`,
+        `Üretilecek soru sayısı: ${adet}`,
+        "",
+        "ÖRNEK SORU:",
+        kaynak,
+        "",
+        "Yanıtı YALNIZCA şu JSON dizisi olarak ver, başka hiçbir şey yazma:",
+        '[{"stem":"soru kökü","options":[{"label":"A","text":"..."},{"label":"B","text":"..."},{"label":"C","text":"..."},{"label":"D","text":"..."}],"answer":"A","explanation":"kısa çözüm"}]',
+      ].join("\n");
+
+  const hazir = onbellekten(talimat);
+  if (hazir) {
+    return NextResponse.json({ sorular: hazir, model: MODEL, onbellek: true, uyarilar: yzKaliteUyarilari(hazir, resmi) });
+  }
 
   /**
    * Başlıklar düz nesne yerine Headers ile kuruluyor ve istek
@@ -126,7 +215,7 @@ export async function POST(req: Request) {
       headers: basliklar,
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2000,
+        max_tokens: adet > 5 ? 4000 : 2000,
         messages: [{ role: "user", content: talimat }],
       }),
     });
@@ -215,8 +304,15 @@ export async function POST(req: Request) {
       .join("\n");
     if (!metin.trim()) return hata("Model boş yanıt döndü", 502);
 
-    const sorular = sorulariDogrula(jsonAyikla(metin));
-    return NextResponse.json({ sorular, model: MODEL });
+    const sorular = zengin
+      ? sorulariDogrulaGenis(jsonAyikla(metin), tip)
+      : sorulariDogrula(jsonAyikla(metin));
+    onbellegeYaz(talimat, sorular);
+    return NextResponse.json({
+      sorular,
+      model: MODEL,
+      uyarilar: yzKaliteUyarilari(sorular, resmi),
+    });
   } catch (e) {
     console.error("[soru-uret]", e);
     return hata(
