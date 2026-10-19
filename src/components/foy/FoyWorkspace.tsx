@@ -450,6 +450,15 @@ export function FoyWorkspace() {
   const teshisMesaji = teshis ? foyTeshisMesaji(teshis) : null;
   const pdfAcik = arac === "pdf" || arac === "kirp";
 
+  useEffect(() => {
+    if (!pdfAcik) return;
+    const kapat = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setArac("kunye");
+    };
+    window.addEventListener("keydown", kapat);
+    return () => window.removeEventListener("keydown", kapat);
+  }, [pdfAcik]);
+
   const panelSurukle = (e: React.PointerEvent, taraf: "sol" | "sag") => {
     e.preventDefault();
     const basX = e.clientX;
@@ -598,19 +607,6 @@ export function FoyWorkspace() {
             ))}
           </div>
           {arac === "kunye" ? <FoyKunyeForm kunye={kunye} onChange={setKunye} /> : null}
-          <div className={pdfAcik ? "" : "hidden"}>
-            <FoyPdfKirp
-              ref={kirpRef}
-              dosya={pdfDosya}
-              onDosya={setPdfDosya}
-              mevcut={ogeler.flatMap((o) => (o.kaynak ? [o.kaynak] : []))}
-              onEkle={kirpEkle}
-              onMetin={(metin) => {
-                const r = cleanPastedText(metin);
-                void pasteEkle(r.blocks);
-              }}
-            />
-          </div>
           {arac === "gorsel" ? (
             <div className="space-y-3">
               <FoyFotograf onEkle={(b) => void pasteEkle(b)} />
@@ -753,6 +749,40 @@ export function FoyWorkspace() {
             onIndirOgretmen={() => void indir("ogretmen")}
           />
         </section>
+      </div>
+
+      <div
+        className={pdfAcik ? "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3" : "hidden"}
+        role="dialog"
+        aria-modal={pdfAcik}
+        aria-label="PDF'den soru al"
+      >
+        <div className="flex h-[min(94vh,960px)] w-[min(1120px,96vw)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <h2 className="text-sm font-bold text-[#173b70]">{"PDF'den soru al"}</h2>
+            <button
+              type="button"
+              className="rounded border px-3 py-1 text-xs font-semibold"
+              onClick={() => setArac("kunye")}
+              data-test="foy-kirp-kapat"
+            >
+              Kapat
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <FoyPdfKirp
+              ref={kirpRef}
+              dosya={pdfDosya}
+              onDosya={setPdfDosya}
+              mevcut={ogeler.flatMap((o) => (o.kaynak ? [o.kaynak] : []))}
+              onEkle={kirpEkle}
+              onMetin={(metin) => {
+                const r = cleanPastedText(metin);
+                void pasteEkle(r.blocks);
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {formulAcik ? (
