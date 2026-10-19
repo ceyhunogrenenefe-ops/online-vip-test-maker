@@ -66,6 +66,28 @@ test("eksik virgul ve ic tirnak yuzunden kirilan model jsonu okunur", () => {
   assert.equal(veri[0].explanation, "kısa çözüm");
 });
 
+test("latex ters bolu ve kesik dizi okunur", () => {
+  const latex = '[{"stem":"\\sqrt{16} ve \\frac{1}{2} ile 2\\times3","options":[],"answer":"","explanation":""}]';
+  const veri = jsonAyikla(latex) as { stem: string }[];
+  assert.match(veri[0].stem, /sqrt\{16\}/);
+  assert.match(veri[0].stem, /frac\{1\}\{2\}/);
+  assert.match(veri[0].stem, /times/);
+
+  const kesik = `[
+  {"stem":"Ilk soru yeterince uzun.","options":[],"answer":"4","explanation":"tamam"},
+  {"stem":"Ikinci soru kesildi`;
+  const liste = jsonAyikla(kesik) as { stem: string; answer: string }[];
+  assert.equal(liste[0].answer, "4");
+  assert.match(liste[0].stem, /Ilk soru/);
+});
+
+test("ondeki koseli not gercek soru dizisini yutmaz", () => {
+  const metin = `[Not: onay yok]\n[{"stem":"Asil soru yeterince uzun.","options":[],"answer":"","explanation":""}]`;
+  const veri = jsonAyikla(metin) as { stem: string }[];
+  assert.equal(veri.length, 1);
+  assert.match(veri[0].stem, /Asil soru/);
+});
+
 test("fotokopi zemini beyazlatir ve rengi griye cevirir", () => {
   const data = new Uint8ClampedArray([255, 0, 0, 255, 250, 250, 250, 255]);
   const img = { data, width: 2, height: 1 } as ImageData;

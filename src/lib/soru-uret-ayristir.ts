@@ -63,8 +63,22 @@ function jsonOnar(girdi: string): string {
       while (i < s.length) {
         const ch = s[i];
         if (ch === "\\") {
-          out += ch + (s[i + 1] ?? "");
-          i += s[i + 1] ? 2 : 1;
+          const n = s[i + 1] ?? "";
+          const latex =
+            n !== '"' &&
+            n !== "\\" &&
+            n !== "/" &&
+            /[a-zA-Z]/.test(s[i + 2] ?? "");
+          if (n === "u" && /^[0-9a-fA-F]{4}/.test(s.slice(i + 2, i + 6))) {
+            out += s.slice(i, i + 6);
+            i += 6;
+          } else if (!latex && "\"\\/bfnrt".includes(n)) {
+            out += "\\" + n;
+            i += 2;
+          } else {
+            out += "\\\\" + n;
+            i += n ? 2 : 1;
+          }
           continue;
         }
         if (ch === "\n" || ch === "\r") {
@@ -109,27 +123,98 @@ function jsonOnar(girdi: string): string {
   return out.replace(/,\s*([}\]])/g, "$1");
 }
 
+function koseliKapanis(s: string, bas: number): number {
+  let der = 0;
+  let i = bas;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '"') {
+      i++;
+      while (i < s.length) {
+        if (s[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (s[i] === '"') {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (c === "[") der++;
+    else if (c === "]") {
+      der--;
+      if (der === 0) return i;
+    }
+    i++;
+  }
+  return -1;
+}
+
+/** Kesilen yanıtın açık dizge ve parantezlerini kapatır. */
+function jsonKapat(s: string): string {
+  let out = "";
+  const yigin: string[] = [];
+  let str = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    out += c;
+    if (str) {
+      if (c === "\\") {
+        out += s[i + 1] ?? "";
+        if (s[i + 1]) i++;
+        continue;
+      }
+      if (c === '"') str = false;
+      continue;
+    }
+    if (c === '"') str = true;
+    else if (c === "[") yigin.push("]");
+    else if (c === "{") yigin.push("}");
+    else if ((c === "]" || c === "}") && yigin[yigin.length - 1] === c) yigin.pop();
+  }
+  if (str) out += '"';
+  while (yigin.length) out += yigin.pop();
+  return out;
+}
+
+function jsonDene(parca: string): unknown | null {
+  const aday = [parca, jsonOnar(parca), jsonOnar(jsonKapat(parca))];
+  for (const p of aday) {
+    try {
+      return JSON.parse(p);
+    } catch {
+      /* sıradaki aday */
+    }
+  }
+  return null;
+}
+
 /** Modelin döndürdüğü metinden JSON dizisini ayıklar. */
 export function jsonAyikla(metin: string): unknown {
   const t = String(metin || "").trim();
   if (!t) throw new Error("Yanıt boş");
   const blok = t.match(/```(?:json)?\s*([\s\S]*?)```/);
   const ham = blok ? blok[1] : t;
-  const bas = ham.indexOf("[");
-  const son = ham.lastIndexOf("]");
-  if (bas === -1 || son === -1 || son <= bas) {
-    throw new Error("Yanıtta JSON bulunamadı");
+  const parcalar: string[] = [];
+  for (let i = 0; i < ham.length; i++) {
+    if (ham[i] !== "[") continue;
+    const sonra = ham[boslukSonrasi(ham, i + 1)];
+    if (sonra !== "{" && sonra !== '"' && sonra !== "]") continue;
+    const son = koseliKapanis(ham, i);
+    parcalar.push(son > i ? ham.slice(i, son + 1) : jsonKapat(ham.slice(i)));
   }
-  const parca = ham.slice(bas, son + 1);
-  try {
-    return JSON.parse(parca);
-  } catch {
-    try {
-      return JSON.parse(jsonOnar(parca));
-    } catch {
-      throw new Error("Modelin yanıtı okunamadı. Bir kez daha üretin.");
-    }
+  const ilk = ham.indexOf("[");
+  const bitis = ham.lastIndexOf("]");
+  if (ilk !== -1 && bitis > ilk) parcalar.push(ham.slice(ilk, bitis + 1));
+  parcalar.sort((a, b) => b.length - a.length);
+  for (const p of parcalar) {
+    const veri = jsonDene(p);
+    if (Array.isArray(veri)) return veri;
   }
+  throw new Error("Modelin yanıtı okunamadı. Bir kez daha üretin.");
 }
 
 export function sorulariDogrula(veri: unknown): UretilenSoru[] {

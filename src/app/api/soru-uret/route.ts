@@ -138,6 +138,7 @@ export async function POST(req: Request) {
         `- ${kazanimSatiri}`,
         "- Öğrenci adı, numara veya kişisel bilgi isteme ve yazma.",
         "- Türkçe yazım kurallarına uy.",
+        "- Kesir ve kökü 1/2 ve karekök diye yaz. Ters bölü ile LaTeX kullanma.",
         tip === "Çoktan seçmeli"
           ? "- 4 şık (A B C D) yaz ve answer alanında yalnızca bir doğru şıkkın harfini ver."
           : tip === "Doğru / yanlış"
