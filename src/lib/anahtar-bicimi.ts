@@ -26,6 +26,30 @@ function turOneki(t: string): string {
   return `sk-ant-${tur}-`;
 }
 
+/**
+ * Soru üretiminin kullanamayacağı anahtar türü. null ise biçim buna göre engel değil.
+ * Yönetici anahtarı ve OAuth belirteci /v1/messages tarafından "x-api-key header
+ * is required" diye reddedilir; başlık gitmiş olsa da mesaj aynıdır.
+ */
+export function anahtarReddi(ham: string | undefined): string | null {
+  const onek = turOneki((ham ?? "").trim());
+  if (onek.startsWith("sk-ant-admin")) {
+    return (
+      "ANTHROPIC_API_KEY bir yönetici anahtarı (sk-ant-admin). Soru üretimi bunu kullanamaz. " +
+      "platform.claude.com/settings/keys adresinde sk-ant-api03- ile başlayan bir API anahtarı oluşturun " +
+      "ve Vercel'de ANTHROPIC_API_KEY değerini silip bu anahtarla yeniden ekleyin."
+    );
+  }
+  if (onek.startsWith("sk-ant-oat")) {
+    return (
+      "ANTHROPIC_API_KEY bir OAuth belirteci (sk-ant-oat). Soru üretimi sk-ant-api03- ile başlayan " +
+      "Console API anahtarı ister. platform.claude.com/settings/keys adresinden yeni anahtar alıp " +
+      "Vercel'deki ANTHROPIC_API_KEY değerini değiştirin."
+    );
+  }
+  return null;
+}
+
 export function anahtarBicimi(ham: string | undefined): string {
   const h = ham ?? "";
   const t = h.trim();

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { anahtarBicimi } from "../anahtar-bicimi.ts";
+import { anahtarBicimi, anahtarReddi } from "../anahtar-bicimi.ts";
 
 const TB = String.fromCharCode(92);
 const ORNEK = "sk-ant-api03-" + "A1b2C3d4E5f6G7h8".repeat(4);
@@ -50,6 +50,15 @@ test("tanimsiz deger cokmez", () => {
 
 test("ters bolu iceren deger gecersiz sayilmaz (yazdirilabilir ascii)", () => {
   assert.doesNotMatch(anahtarBicimi("sk-ant-" + TB + "x"), /gecersiz-karakter/);
+});
+
+test("yonetici anahtari soru uretimine girmeden reddedilir", () => {
+  const mesaj = anahtarReddi("sk-ant-admin01-" + "x".repeat(95));
+  assert.ok(mesaj);
+  assert.match(mesaj, /sk-ant-admin/);
+  assert.match(mesaj, /sk-ant-api03-/);
+  assert.equal(anahtarReddi("sk-ant-api03-" + "x".repeat(95)), null);
+  assert.match(anahtarReddi("sk-ant-oat01-" + "y".repeat(90)) || "", /sk-ant-oat/);
 });
 
 test("tur oneki Console anahtarini yonetici anahtarindan ayirir", () => {
