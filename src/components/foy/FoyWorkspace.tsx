@@ -759,7 +759,7 @@ export function FoyWorkspace() {
       >
         <div className="flex h-[min(94vh,960px)] w-[min(1120px,96vw)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b px-4 py-2">
-            <h2 className="text-sm font-bold text-[#173b70]">PDF'den soru al</h2>
+            <h2 className="text-sm font-bold text-[#173b70]">{"PDF'den soru al"}</h2>
             <button
               type="button"
               className="rounded border px-3 py-1 text-xs font-semibold"
