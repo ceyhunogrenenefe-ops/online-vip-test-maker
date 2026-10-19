@@ -6,6 +6,7 @@ import { prepareImage, type HazirlikSonucu } from "@/lib/image-prepare";
 import { ocrTurkce, GUVEN_ESIGI, type OcrSonuc } from "@/lib/ocr-text";
 import { matematikSupheliMi } from "@/lib/math-detect";
 import type { PasteBlock } from "@/lib/paste-clean";
+import type { GorselRol } from "@/lib/pdf-blocks";
 
 type Satir = {
   metin: string;
@@ -24,7 +25,13 @@ type Satir = {
  * formül şüphelisi satırlar işaretlenir ve öğretmenin formül editörüyle
  * yeniden yazması beklenir.
  */
-export function FoyFotograf({ onEkle }: { onEkle: (bloklar: PasteBlock[]) => void }) {
+export function FoyFotograf({
+  onEkle,
+  onGorsel,
+}: {
+  onEkle: (bloklar: PasteBlock[]) => void;
+  onGorsel?: (dataUrl: string, rol: GorselRol) => void;
+}) {
   const dosyaRef = useRef<HTMLInputElement | null>(null);
   const [orijinal, setOrijinal] = useState<string | null>(null);
   const [hazirlik, setHazirlik] = useState<HazirlikSonucu | null>(null);
@@ -113,6 +120,35 @@ export function FoyFotograf({ onEkle }: { onEkle: (bloklar: PasteBlock[]) => voi
       <p className="text-[11px] text-slate-500">
         Görüntü sunucuya gönderilmez; tanıma tarayıcıda yapılır.
       </p>
+
+      {orijinal && onGorsel ? (
+        <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            onClick={() => onGorsel(orijinal, "soru")}
+            className="rounded bg-dershanem-navy px-2 py-1 text-[11px] font-semibold text-white"
+            data-test="foy-fotograf-soru"
+          >
+            Soru olarak ekle
+          </button>
+          <button
+            type="button"
+            onClick={() => onGorsel(orijinal, "aciklama")}
+            className="rounded border border-slate-300 px-2 py-1 text-[11px]"
+            data-test="foy-fotograf-aciklama"
+          >
+            Açıklama olarak ekle
+          </button>
+          <button
+            type="button"
+            onClick={() => onGorsel(orijinal, "cozum")}
+            className="rounded border border-slate-300 px-2 py-1 text-[11px]"
+            data-test="foy-fotograf-cozum"
+          >
+            Çözüm olarak ekle
+          </button>
+        </div>
+      ) : null}
 
       {hata ? <p className="rounded bg-red-50 p-2 text-xs text-red-700">{hata}</p> : null}
 

@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Redo2, Save, Sigma, Undo2 } from "lucide-react";
-import type { DocBlock } from "@/lib/pdf-blocks";
+import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
 import type { PasteBlock } from "@/lib/paste-clean";
 import { cleanPastedText } from "@/lib/paste-clean";
-import { soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
+import { numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
 import { foyPdfOlustur, foyTeshisMesaji, type FoyTeshis } from "@/lib/foy-pdf";
 import { foyKaliteKontrol, puanOner, soruOgeleriniYenile, type FoyOge } from "@/lib/foy-baski";
 import type { KirpilmisParca as KirpParca } from "./FoyPdfKirp";
@@ -331,7 +331,7 @@ export function FoyWorkspace() {
   const indir = async (surum: "ogrenci" | "ogretmen") => {
     const sonuc = await pdfUret(surum);
     if (!sonuc) return;
-    const cevapsiz = ogelerRef.current.filter((o) => o.blok.kind === "question" && !(o.cevap || "").trim()).length;
+    const cevapsiz = ogelerRef.current.filter((o) => numaraliSoruMu(o.blok) && !(o.cevap || "").trim()).length;
     const notlar = foyKaliteKontrol({
       bloklar: ogelerRef.current.map((o) => o.blok),
       ogretmenIndir: surum === "ogretmen",
@@ -386,20 +386,34 @@ export function FoyWorkspace() {
     degistir([...ogelerRef.current, ...yeni]);
   };
 
+  const gorselBlok = (dataUrl: string, aspect: number, rol: GorselRol): DocBlock => ({
+    kind: "image",
+    dataUrl,
+    aspect: aspect || 1,
+    maxHeightMm: 70,
+    rol,
+  });
+
   const kirpEkle = (parcalar: KirpParca[]) => {
     degistir([
       ...ogelerRef.current,
       ...parcalar.map((p) => ({
         id: yeniId(),
-        blok: {
-          kind: "image" as const,
-          dataUrl: p.dataUrl,
-          aspect: p.aspect,
-          maxHeightMm: 70,
-        },
+        blok: gorselBlok(p.dataUrl, p.aspect, p.rol),
         kaynak: p.kaynak,
       })),
     ]);
+  };
+
+  const gorselEkle = (dataUrl: string, rol: GorselRol) => {
+    const img = new Image();
+    img.onload = () => {
+      degistir([
+        ...ogelerRef.current,
+        { id: yeniId(), blok: gorselBlok(dataUrl, img.naturalWidth / Math.max(1, img.naturalHeight), rol) },
+      ]);
+    };
+    img.src = dataUrl;
   };
 
   const tasi = (i: number, yon: -1 | 1) => {
@@ -429,13 +443,11 @@ export function FoyWorkspace() {
   };
 
   const puanDagit = () => {
-    const sorular = ogelerRef.current.filter((o) => o.blok.kind === "question");
+    const sorular = ogelerRef.current.filter((o) => numaraliSoruMu(o.blok));
     const puanlar = puanOner(sorular.length);
     let k = 0;
     degistir(
-      ogelerRef.current.map((o) =>
-        o.blok.kind === "question" ? { ...o, puan: puanlar[k++] } : o
-      )
+      ogelerRef.current.map((o) => (numaraliSoruMu(o.blok) ? { ...o, puan: puanlar[k++] } : o))
     );
   };
 
@@ -609,7 +621,7 @@ export function FoyWorkspace() {
           {arac === "kunye" ? <FoyKunyeForm kunye={kunye} onChange={setKunye} /> : null}
           {arac === "gorsel" ? (
             <div className="space-y-3">
-              <FoyFotograf onEkle={(b) => void pasteEkle(b)} />
+              <FoyFotograf onEkle={(b) => void pasteEkle(b)} onGorsel={gorselEkle} />
               <FoyYapistir onEkle={(b) => void pasteEkle(b)} />
             </div>
           ) : null}
@@ -775,6 +787,7 @@ export function FoyWorkspace() {
               dosya={pdfDosya}
               onDosya={setPdfDosya}
               mevcut={ogeler.flatMap((o) => (o.kaynak ? [o.kaynak] : []))}
+              sonrakiNo={ogeler.reduce((n, o) => n + (numaraliSoruMu(o.blok) ? 1 : 0), 0) + 1}
               onEkle={kirpEkle}
               onMetin={(metin) => {
                 const r = cleanPastedText(metin);

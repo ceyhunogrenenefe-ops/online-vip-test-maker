@@ -53,7 +53,7 @@ export function cevapAnahtariSatirlari(
 ): CevapSatiri[] {
   const satirlar: CevapSatiri[] = [];
   for (const o of ogeler) {
-    if (o.blok.kind !== "question") continue;
+    if (o.blok.kind !== "question" && !(o.blok.kind === "image" && o.blok.rol === "soru")) continue;
     const no = o.blok.no ?? satirlar.length + 1;
     const cevap = (o.cevap || "").trim();
     satirlar.push({
@@ -92,9 +92,16 @@ export type FoyOge = {
 
 export function soruOgeleriniYenile(ogeler: FoyOge[]): FoyOge[] {
   let no = 1;
-  return ogeler.map((o) =>
-    o.blok.kind === "question" ? { ...o, blok: { ...o.blok, no: no++ } } : o
-  );
+  return ogeler.map((o) => {
+    if (o.blok.kind === "question" || (o.blok.kind === "image" && o.blok.rol === "soru")) {
+      return { ...o, blok: { ...o.blok, no: no++ } };
+    }
+    if (o.blok.kind === "image" && o.blok.no != null) {
+      const { no: _numara, ...kalan } = o.blok;
+      return { ...o, blok: kalan };
+    }
+    return o;
+  });
 }
 
 export type KirpmaAlani = {

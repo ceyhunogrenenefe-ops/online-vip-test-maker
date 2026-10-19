@@ -78,10 +78,24 @@ export async function yapistirmayiBelgeye(
   return { bloklar: out, uyarilar, sonrakiSoruNo: soruNo };
 }
 
+/** Yazılı soru veya soru olarak işaretlenmiş görsel. Açıklama ve çözüm sayılmaz. */
+export function numaraliSoruMu(
+  b: DocBlock
+): b is Extract<DocBlock, { kind: "question" }> | (Extract<DocBlock, { kind: "image" }> & { rol: "soru" }) {
+  return b.kind === "question" || (b.kind === "image" && b.rol === "soru");
+}
+
 /** Blok listesinde soru numaralarını baştan sıralar (silme/taşıma sonrası) */
 export function soruNumaralariniYenile(bloklar: DocBlock[]): DocBlock[] {
   let no = 1;
-  return bloklar.map((b) => (b.kind === "question" ? { ...b, no: no++ } : b));
+  return bloklar.map((b) => {
+    if (numaraliSoruMu(b)) return { ...b, no: no++ };
+    if (b.kind === "image" && b.no != null) {
+      const { no: _numara, ...kalan } = b;
+      return kalan;
+    }
+    return b;
+  });
 }
 
 /** Blok için kısa, insan okur etiket — editör listesinde gösterilir */
@@ -104,6 +118,9 @@ export function blokEtiketi(b: DocBlock): string {
     case "answerLines":
       return `Cevap satırı (${b.count})`;
     case "image":
+      if (b.rol === "aciklama") return "Açıklama";
+      if (b.rol === "cozum") return "Çözüm";
+      if (b.rol === "soru") return `Soru ${b.no ?? "?"}: görsel`;
       return "Görsel";
     case "spacer":
       return `Boşluk (${b.heightMm} mm)`;

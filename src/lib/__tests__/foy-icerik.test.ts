@@ -97,6 +97,31 @@ test("soru numaralari silme sonrasi bastan siralanir", () => {
   assert.equal(y[1].kind, "paragraph", "soru olmayan bloklar bozulmamali");
 });
 
+test("kirpilmis soru numaralanir, aciklama ve cozum numaralanmaz", () => {
+  const gorsel = (rol: "soru" | "aciklama" | "cozum"): DocBlock => ({
+    kind: "image",
+    dataUrl: "data:image/png;base64,x",
+    aspect: 1,
+    rol,
+  });
+  const y = soruNumaralariniYenile([
+    { kind: "question", stem: [{ text: "a" }], options: [] },
+    gorsel("soru"),
+    gorsel("aciklama"),
+    gorsel("cozum"),
+    gorsel("soru"),
+  ]);
+  assert.equal(y[0].kind === "question" ? y[0].no : 0, 1);
+  assert.equal(y[1].kind === "image" ? y[1].no : 0, 2);
+  assert.equal(y[2].kind === "image" ? y[2].rol : "", "aciklama");
+  assert.equal(y[2].kind === "image" ? y[2].no : 0, undefined);
+  assert.equal(y[3].kind === "image" ? y[3].no : 0, undefined);
+  assert.equal(y[4].kind === "image" ? y[4].no : 0, 3);
+  assert.match(blokEtiketi(y[1]), /Soru 2/);
+  assert.match(blokEtiketi(y[2]), /Açıklama/);
+  assert.match(blokEtiketi(y[3]), /Çözüm/);
+});
+
 test("blok etiketi her tur icin metin uretir", () => {
   const turler: DocBlock[] = [
     { kind: "sectionTitle", text: "BAŞLIK" },
