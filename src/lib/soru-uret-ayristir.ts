@@ -35,6 +35,80 @@ export type SoruTipi = (typeof SORU_TIPLERI)[number];
 
 export const ZORLUKLAR = ["Kolay", "Orta", "Zor", "Karma"] as const;
 
+function boslukSonrasi(s: string, i: number): number {
+  let k = i;
+  while (k < s.length && /\s/.test(s[k])) k++;
+  return k;
+}
+
+/**
+ * Model bazen dizi içine virgül koymadan ikinci alan yazar ya da metnin
+ * içindeki tırnağı kaçırır. JSON.parse o zaman "Expected ',' or '}'" der.
+ * Burada yalnızca kapanıştan sonra gelen anahtar için virgül eklenir ve
+ * dizgenin içindeki sahte tırnak kaçırılır.
+ */
+function jsonOnar(girdi: string): string {
+  const s = girdi;
+  let out = "";
+  let i = 0;
+  const virgulGerekirse = () => {
+    const next = s[boslukSonrasi(s, i)];
+    if (next === '"' || next === "{" || next === "[") out += ",";
+  };
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '"') {
+      out += '"';
+      i++;
+      while (i < s.length) {
+        const ch = s[i];
+        if (ch === "\\") {
+          out += ch + (s[i + 1] ?? "");
+          i += s[i + 1] ? 2 : 1;
+          continue;
+        }
+        if (ch === "\n" || ch === "\r") {
+          out += "\\n";
+          i++;
+          continue;
+        }
+        if (ch === '"') {
+          const next = s[boslukSonrasi(s, i + 1)];
+          const kapanir = next === undefined || ",}]:\"[{".includes(next);
+          if (kapanir) {
+            out += '"';
+            i++;
+            if (next === '"' || next === "{" || next === "[") out += ",";
+            break;
+          }
+          out += '\\"';
+          i++;
+          continue;
+        }
+        out += ch;
+        i++;
+      }
+      continue;
+    }
+    if (c === "}" || c === "]") {
+      out += c;
+      i++;
+      virgulGerekirse();
+      continue;
+    }
+    const soz = s.slice(i).match(/^(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)/);
+    if (soz && (i === 0 || /[\s,:[{]/.test(s[i - 1]))) {
+      out += soz[0];
+      i += soz[0].length;
+      virgulGerekirse();
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out.replace(/,\s*([}\]])/g, "$1");
+}
+
 /** Modelin döndürdüğü metinden JSON dizisini ayıklar. */
 export function jsonAyikla(metin: string): unknown {
   const t = String(metin || "").trim();
@@ -46,7 +120,16 @@ export function jsonAyikla(metin: string): unknown {
   if (bas === -1 || son === -1 || son <= bas) {
     throw new Error("Yanıtta JSON bulunamadı");
   }
-  return JSON.parse(ham.slice(bas, son + 1));
+  const parca = ham.slice(bas, son + 1);
+  try {
+    return JSON.parse(parca);
+  } catch {
+    try {
+      return JSON.parse(jsonOnar(parca));
+    } catch {
+      throw new Error("Modelin yanıtı okunamadı. Bir kez daha üretin.");
+    }
+  }
 }
 
 export function sorulariDogrula(veri: unknown): UretilenSoru[] {

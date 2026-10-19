@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sorulariDogrulaGenis, yzKaliteUyarilari } from "../soru-uret-ayristir.ts";
+import { jsonAyikla, sorulariDogrulaGenis, yzKaliteUyarilari } from "../soru-uret-ayristir.ts";
 import { applyEnhanceToImageData, DEFAULT_ENHANCE } from "../image-enhance.ts";
 
 test("acik uclu soruda bos cevap korunur, uydurulmaz", () => {
@@ -47,6 +47,23 @@ test("resmî tablodan seçilen çıktı onaylı soru sayılmaz", () => {
   );
   assert.ok(notlar.some((n) => n.includes("konu soru dağılım tablosunda kayıtlı")));
   assert.ok(notlar.some((n) => n.includes("onaylanmadı")));
+});
+
+test("eksik virgul ve ic tirnak yuzunden kirilan model jsonu okunur", () => {
+  const bozuk = `[
+  {
+    "stem": "Hangisi "doğru" dur? Kök yeterince uzun.",
+    "options": []
+    "answer": ""
+    "explanation": "kısa çözüm"
+  }
+]`;
+  assert.throws(() => JSON.parse(bozuk));
+  const veri = jsonAyikla(bozuk) as { stem: string; answer: string; explanation: string }[];
+  assert.equal(veri.length, 1);
+  assert.match(veri[0].stem, /doğru/);
+  assert.equal(veri[0].answer, "");
+  assert.equal(veri[0].explanation, "kısa çözüm");
 });
 
 test("fotokopi zemini beyazlatir ve rengi griye cevirir", () => {
