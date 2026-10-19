@@ -51,7 +51,7 @@ export async function middleware(req: NextRequest) {
     const mesaj =
       karar === "pasif"
         ? "Hesap pasif. Test Maker oturumu açılamaz."
-        : "Bu hesap öğretmen olarak kayıtlı değil.";
+        : "Bu hesap öğretmen veya koç olarak kayıtlı değil.";
     return reddet(req, 403, mesaj);
   }
 

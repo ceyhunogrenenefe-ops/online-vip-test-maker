@@ -8,14 +8,14 @@ test("aktif ogretmen ve super admin girebilir", () => {
   assert.equal(erisimKarari({ role: "coach", roles: ["teacher"], is_active: true }), "izin");
   assert.equal(erisimKarari({ role: "super_admin", is_active: true }), "izin");
   assert.equal(erisimKarari({ role: "admin", is_active: true }), "izin");
+  assert.equal(erisimKarari({ role: "coach", is_active: true }), "izin");
 });
 
-test("koclukta ogretmen kaydi olan girebilir, ogrenci ve koc giremez", () => {
+test("koclukta ogretmen ve koc girebilir, ogrenci giremez", () => {
   assert.equal(koclukHesapKarari({ role: "teacher", isActive: true }), "izin");
-  assert.equal(koclukHesapKarari({ role: "coach", roles: ["teacher"], isActive: true }), "izin");
+  assert.equal(koclukHesapKarari({ role: "coach", isActive: true }), "izin");
   assert.equal(koclukHesapKarari({ role: "student", isActive: true }), "yetkisiz");
-  assert.equal(koclukHesapKarari({ role: "coach", isActive: true }), "yetkisiz");
-  assert.equal(koclukHesapKarari({ role: "teacher", isActive: false }), "pasif");
+  assert.equal(koclukHesapKarari({ role: "coach", isActive: false }), "pasif");
 });
 
 test("ogrenci sinav linki kapinin disinda kalir", () => {
@@ -52,6 +52,6 @@ test("oturum imzasi dogrulanir, baska sirr ile gecmez", async () => {
 test("pasif hesap ve ogrenci giremez", () => {
   assert.equal(erisimKarari({ role: "teacher", is_active: false }), "pasif");
   assert.equal(erisimKarari({ role: "student", is_active: true }), "yetkisiz");
-  assert.equal(erisimKarari({ role: "coach", is_active: true }), "yetkisiz");
+  assert.equal(erisimKarari({ role: "coach", is_active: false }), "pasif");
   assert.equal(erisimKarari(null), "yok");
 });

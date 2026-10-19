@@ -4,7 +4,7 @@ import { koclukGirisAdresi, OTURUM_CEREZ, OTURUM_SURE_SANIYE, oturumImzala, otur
 
 /**
  * Şifre Koçluk girişine iletilir ve burada saklanmaz.
- * Yalnızca öğretmen, yönetici ve süper yönetici çerez alır.
+ * Öğretmen, koç, yönetici ve süper yönetici çerez alır.
  */
 export async function POST(req: Request) {
   let govde: { email?: unknown; password?: unknown };
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const mesaj =
       sonuc.karar === "pasif"
         ? "Hesap pasif. Test Maker açılamaz."
-        : "Bu hesap Smart VIP Koçlukta öğretmen olarak kayıtlı değil.";
+        : "Bu hesap Smart VIP Koçlukta öğretmen veya koç olarak kayıtlı değil.";
     return NextResponse.json({ hata: mesaj }, { status: 403 });
   }
 
