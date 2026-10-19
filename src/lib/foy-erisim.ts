@@ -9,7 +9,7 @@
  * Bayrak kapalıyken (TEST_MAKER_AUTH_REQUIRED !== "1") kapı uygulanmaz.
  */
 
-export const TEST_MAKER_ROLLERI = ["super_admin", "admin", "teacher"] as const;
+export const TEST_MAKER_ROLLERI = ["super_admin", "admin", "teacher", "coach"] as const;
 
 export type ErisimKarari = "izin" | "pasif" | "yetkisiz" | "yok";
 

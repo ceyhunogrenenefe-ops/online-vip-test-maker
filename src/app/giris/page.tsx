@@ -40,7 +40,7 @@ export default function GirisSayfasi() {
         <p className="text-xs font-semibold uppercase tracking-wide text-[#173b70]">Online VIP Test Maker</p>
         <h1 className="mt-1 text-xl font-bold text-slate-900">Öğretmen girişi</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Smart VIP Koçlukta öğretmen olarak kayıtlı hesaplar girebilir. Öğrenci ve koç hesapları bu araca alınmaz.
+          Smart VIP Koçlukta öğretmen veya koç olarak kayıtlı hesaplar girebilir. Öğrenci hesapları bu araca alınmaz.
         </p>
         <label className="mt-4 block text-sm font-medium text-slate-700">
           E-posta
