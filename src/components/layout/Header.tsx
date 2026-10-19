@@ -11,6 +11,7 @@ import {
   BookOpen,
   Tag,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 
 const navItems: {
@@ -28,6 +29,26 @@ const navItems: {
 export function Header() {
   const activeView = useAppStore((s) => s.activeView);
   const setActiveView = useAppStore((s) => s.setActiveView);
+  const [ogretmen, setOgretmen] = useState<string | null>(null);
+
+  useEffect(() => {
+    let iptal = false;
+    void fetch("/api/oturum")
+      .then((r) => r.json())
+      .then((j: { gerekli?: boolean; kullanici?: { ad?: string; email?: string } | null }) => {
+        if (iptal || !j.gerekli || !j.kullanici) return;
+        setOgretmen(j.kullanici.ad || j.kullanici.email || "Öğretmen");
+      })
+      .catch(() => undefined);
+    return () => {
+      iptal = true;
+    };
+  }, []);
+
+  const cikis = async () => {
+    await fetch("/api/cikis", { method: "POST" });
+    window.location.assign("/giris");
+  };
 
   return (
     <header className="bg-dershanem-navy text-white shadow-lg">
@@ -94,9 +115,14 @@ export function Header() {
 
         <div className="flex items-center gap-2 text-right text-sm">
           <div className="hidden sm:block">
-            <p className="font-medium">Öğretmen</p>
+            <p className="font-medium">{ogretmen || "Öğretmen"}</p>
             <p className="text-xs text-slate-400">dershanem.vip</p>
           </div>
+          {ogretmen ? (
+            <button type="button" onClick={() => void cikis()} className="rounded border border-white/30 px-2 py-1 text-xs">
+              Çıkış
+            </button>
+          ) : null}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-dershanem-blue text-sm font-bold">
             D
           </div>

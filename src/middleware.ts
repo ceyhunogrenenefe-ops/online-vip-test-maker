@@ -1,26 +1,28 @@
 /**
- * SmartKoçluk oturumu — yalnızca TEST_MAKER_AUTH_REQUIRED=1 iken devreye girer.
+ * Smart VIP Koçluk öğretmen kapısı — yalnızca TEST_MAKER_AUTH_REQUIRED=1 iken.
  *
- * Bayrak kapalıyken mevcut açık çalışma alanı değişmez. Bayrak açıkken
- * yapılandırma eksikse kapı AÇILMAZ (503). Şifre toplanmaz, users.password_hash
- * okunmaz, anahtar istemciye yazılmaz.
- *
- * Gerekli ortam değişkenleri (yalnızca sunucu):
- *   SUPABASE_URL
- *   SUPABASE_SERVICE_ROLE_KEY
- *   SUPABASE_JWT_SECRET
+ * Bayrak kapalıyken çalışma alanı açık kalır. Bayrak açıkken oturum sırrı
+ * yoksa kapı açılmaz (503). Şifre bu uygulamada tutulmaz.
+ * Öğrenci sınav linki (/exam) kapının dışındadır.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
 import { erisimKarari, type ErisimKullanici } from "@/lib/foy-erisim";
+import {
+  girisZorunlu,
+  herkeseAcikYol,
+  OTURUM_CEREZ,
+  oturumdenKullanici,
+  oturumDogrula,
+  oturumSirleri,
+} from "@/lib/oturum";
 
 export async function middleware(req: NextRequest) {
-  if (process.env.TEST_MAKER_AUTH_REQUIRED !== "1") return NextResponse.next();
+  if (!girisZorunlu()) return NextResponse.next();
+  if (herkeseAcikYol(req.nextUrl.pathname)) return NextResponse.next();
 
-  const url = process.env.SUPABASE_URL?.trim();
-  const servis = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const sir = process.env.SUPABASE_JWT_SECRET?.trim();
-  if (!url || !servis || !sir) {
+  const sirler = oturumSirleri();
+  if (!sirler.length) {
     return new NextResponse(
       "Test Maker girişi yapılandırılmadı. Yetkisiz erişime izin verilmiyor.",
       { status: 503 }
@@ -28,37 +30,46 @@ export async function middleware(req: NextRequest) {
   }
 
   const token = tokenOku(req);
-  if (!token) {
-    return new NextResponse(
-      "Bu çalışma alanı SmartKoçluk öğretmen oturumu ister. Geçerli oturum bulunamadı.",
-      { status: 401 }
-    );
-  }
+  if (!token) return reddet(req, 401, "Smart VIP Koçluk öğretmen girişi gerekli.");
 
-  const payload = await jwtDogrula(token, sir);
+  const payload = await oturumDogrula(token, sirler);
   const sub = typeof payload?.sub === "string" ? payload.sub : "";
   const email = typeof payload?.email === "string" ? payload.email : "";
-  if (!payload || !sub) {
-    return new NextResponse("Oturum doğrulanamadı.", { status: 401 });
+  if (!payload || !sub) return reddet(req, 401, "Oturum doğrulanamadı.");
+
+  const url = process.env.SUPABASE_URL?.trim();
+  const servis = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  let kullanici = oturumdenKullanici(payload);
+  if (url && servis) {
+    const satir = await kullaniciOku(url, servis, sub, email);
+    if (!satir) return reddet(req, 403, "Bu hesap Test Maker için yetkili değil.");
+    kullanici = satir;
   }
 
-  const kullanici = await kullaniciOku(url, servis, sub, email);
   const karar = erisimKarari(kullanici);
   if (karar !== "izin") {
     const mesaj =
       karar === "pasif"
         ? "Hesap pasif. Test Maker oturumu açılamaz."
-        : "Bu hesap Test Maker için yetkili değil.";
-    return new NextResponse(mesaj, { status: 403 });
+        : "Bu hesap öğretmen olarak kayıtlı değil.";
+    return reddet(req, 403, mesaj);
   }
 
   return NextResponse.next();
 }
 
+function reddet(req: NextRequest, durum: number, mesaj: string) {
+  if (req.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json({ hata: mesaj }, { status: durum });
+  }
+  const giris = new URL("/giris", req.url);
+  return NextResponse.redirect(giris);
+}
+
 function tokenOku(req: NextRequest): string | null {
   const baslik = req.headers.get("authorization");
   if (baslik?.toLowerCase().startsWith("bearer ")) return baslik.slice(7).trim();
-  const duz = req.cookies.get("ovip_access_token")?.value;
+  const duz = req.cookies.get(OTURUM_CEREZ)?.value;
   if (duz) return duz;
   for (const c of req.cookies.getAll()) {
     if (!c.name.startsWith("sb-") || !c.name.endsWith("-auth-token")) continue;
@@ -71,41 +82,6 @@ function tokenOku(req: NextRequest): string | null {
     }
   }
   return null;
-}
-
-function b64url(s: string): Uint8Array {
-  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
-  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-async function jwtDogrula(token: string, secret: string): Promise<Record<string, unknown> | null> {
-  const [h, p, s] = token.split(".");
-  if (!h || !p || !s) return null;
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-    const ok = await crypto.subtle.verify(
-      "HMAC",
-      key,
-      b64url(s) as BufferSource,
-      new TextEncoder().encode(`${h}.${p}`)
-    );
-    if (!ok) return null;
-    const payload = JSON.parse(new TextDecoder().decode(b64url(p))) as Record<string, unknown>;
-    if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) return null;
-    return payload;
-  } catch {
-    return null;
-  }
 }
 
 async function kullaniciOku(
