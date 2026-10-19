@@ -310,7 +310,7 @@ export const FoyPdfKirp = forwardRef<
               </button>
             ))}
           </div>
-          <div className="max-h-[420px] overflow-auto rounded border bg-slate-100">
+          <div className="max-h-[68vh] overflow-auto rounded border bg-slate-100">
             {yukleniyor || !sayfaUrl ? (
               <p className="flex items-center gap-1 p-4 text-slate-500">
                 <Loader2 size={14} className="animate-spin" /> Sayfa hazırlanıyor
