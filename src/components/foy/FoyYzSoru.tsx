@@ -1,42 +1,79 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
-import type { UretilenSoru } from "@/lib/soru-uret-ayristir";
-import type { PasteBlock } from "@/lib/paste-clean";
+import { MEB_YIL, mebKazanimlari } from "@/lib/meb-kazanim";
+import {
+  SORU_TIPLERI,
+  ZORLUKLAR,
+  type UretilenSoru,
+} from "@/lib/soru-uret-ayristir";
 
 /**
- * YZ ile alternatif soru üretimi.
- *
- * Üretilen hiçbir soru doğrudan föye girmez: öğretmen tek tek seçer,
- * metnini düzenleyebilir ve son onayı verir. Model yanıtı yanlış ya da
- * eksik olabilir; sessizce föye yazmak öğretmenin sorumluluğunu
- * görmediği bir içeriğe bağlar.
- *
- * API anahtarı yalnızca sunucuda (/api/soru-uret); istemciye verilmez.
+ * Üretilen soru föye kendiliğinden yazılmaz. Öğretmen kabul, düzenleme
+ * veya yeniden üretimden sonra ekler. Kazanım listesi resmî tablodan
+ * seçilebilir; üretilen soru yine MEB onayı sayılmaz.
  */
 export function FoyYzSoru({
   sinif,
   brans,
   konu,
-  onEkle,
+  onKabul,
 }: {
   sinif: string;
   brans: string;
   konu: string;
-  onEkle: (bloklar: PasteBlock[]) => void;
+  onKabul: (sorular: UretilenSoru[]) => void;
 }) {
+  const [komut, setKomut] = useState("");
   const [kaynak, setKaynak] = useState("");
+  const [altKonu, setAltKonu] = useState("");
+  const [kazanim, setKazanim] = useState("");
+  const kazanimlar = useMemo(() => mebKazanimlari(sinif, brans), [sinif, brans]);
+  const seciliKazanim = kazanimlar.find((s) => s.kazanim === kazanim) || null;
   const [adet, setAdet] = useState(3);
-  const [zorluk, setZorluk] = useState("ayni");
+  const [zorluk, setZorluk] = useState<string>("Orta");
+  const [soruTipi, setSoruTipi] = useState<string>("Açık uçlu");
+  const [hazirlik, setHazirlik] = useState("Yazılıya hazırlık");
   const [sorular, setSorular] = useState<UretilenSoru[]>([]);
   const [secili, setSecili] = useState<Set<number>>(new Set());
+  const [cozum, setCozum] = useState<Set<number>>(new Set());
+  const [uyarilar, setUyarilar] = useState<string[]>([]);
   const [calisiyor, setCalisiyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (kazanim && !kazanimlar.some((s) => s.kazanim === kazanim)) setKazanim("");
+  }, [kazanim, kazanimlar]);
+
+  const iste = async (govde: Record<string, unknown>) => {
+    const r = await fetch("/api/soru-uret", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(govde),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    return j as { sorular: UretilenSoru[]; uyarilar?: string[] };
+  };
+
+  const ortak = {
+    sinif,
+    brans,
+    konu,
+    altKonu,
+    kazanim,
+    adet,
+    zorluk,
+    soruTipi,
+    hazirlik,
+    komut,
+    kaynakSoru: kaynak,
+  };
+
   const uret = async () => {
-    if (!kaynak.trim()) {
-      setHata("Örnek alınacak kaynak soruyu yazın.");
+    if (!komut.trim() && !kaynak.trim()) {
+      setHata("Komut yazın veya örnek soru yapıştırın.");
       return;
     }
     setHata(null);
@@ -44,14 +81,35 @@ export function FoyYzSoru({
     setSorular([]);
     setSecili(new Set());
     try {
-      const r = await fetch("/api/soru-uret", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kaynakSoru: kaynak, sinif, brans, konu, adet, zorluk }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      const j = await iste(ortak);
       setSorular(j.sorular || []);
+      setUyarilar(j.uyarilar || []);
+    } catch (e) {
+      setHata(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCalisiyor(false);
+    }
+  };
+
+  const tek = async (i: number, zorlukYeni: string, benzer = false) => {
+    const s = sorular[i];
+    if (!s) return;
+    setCalisiyor(true);
+    setHata(null);
+    try {
+      const j = await iste({
+        ...ortak,
+        adet: 1,
+        zorluk: zorlukYeni,
+        kaynakSoru: s.stem,
+        komut: benzer
+          ? "Bu soruya benzer, sayıları ve bağlamı değişmiş bir soru yaz."
+          : komut,
+      });
+      const gelen = j.sorular?.[0];
+      if (!gelen) throw new Error("Yeni taslak gelmedi");
+      setSorular((p) => p.map((x, n) => (n === i ? gelen : x)));
+      if (j.uyarilar?.length) setUyarilar(j.uyarilar);
     } catch (e) {
       setHata(e instanceof Error ? e.message : String(e));
     } finally {
@@ -60,84 +118,135 @@ export function FoyYzSoru({
   };
 
   const ekle = () => {
-    const bloklar: PasteBlock[] = [];
-    sorular.forEach((s, i) => {
-      if (!secili.has(i)) return;
-      bloklar.push({
-        kind: "question",
-        stem: [{ text: s.stem }],
-        options: s.options.map((o) => ({ label: o.label, runs: [{ text: o.text }] })),
-      });
-    });
-    if (!bloklar.length) {
+    const secilen = sorular.filter((_, i) => secili.has(i));
+    if (!secilen.length) {
       setHata("Föye eklenecek soru seçilmedi.");
       return;
     }
-    onEkle(bloklar);
+    onKabul(secilen);
     setSorular([]);
     setSecili(new Set());
   };
 
+  const alan = "mt-0.5 w-full rounded border border-slate-300 px-2 py-1";
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 text-xs">
+      <p className="text-[11px] text-slate-500">
+        Telifli kaynak metni ve öğrenci bilgisi yapıştırmayın. Üretilen taslak onayınız olmadan föye girmez.
+        {kazanimlar.length
+          ? ` Kazanım listesi ODSGM ${MEB_YIL} 1. dönem konu soru dağılım tablosundan gelir. Seçilen çıktı tabloda kayıtlıdır; üretilen soru MEB onayı değildir.`
+          : " Bu sınıf ve ders için yüklü resmî tablo yok. Serbest kazanım notu doğrulanmış sayılmaz."}
+      </p>
+      <textarea
+        value={komut}
+        onChange={(e) => setKomut(e.target.value)}
+        rows={3}
+        placeholder="Örn. 7. sınıf matematik, rasyonel sayılar, orta seviyede 8 açık uçlu soru. Üçü problem olsun."
+        className={alan}
+        data-test="foy-yz-komut"
+      />
       <textarea
         value={kaynak}
         onChange={(e) => setKaynak(e.target.value)}
-        rows={4}
-        placeholder="Örnek alınacak soruyu buraya yazın veya yapıştırın…"
-        className="w-full rounded-lg border border-slate-300 p-2 text-xs"
+        rows={3}
+        placeholder="İsterseniz örnek soru da yapıştırın. Boş bırakılabilir."
+        className={alan}
         data-test="foy-yz-kaynak"
       />
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <label className="flex items-center gap-1">
+      <div className="grid grid-cols-2 gap-1">
+        <label>
+          Alt konu
+          <input value={altKonu} onChange={(e) => setAltKonu(e.target.value)} className={alan} />
+        </label>
+        <label className="col-span-2">
+          Kazanım
+          {kazanimlar.length ? (
+            <select
+              value={kazanim}
+              onChange={(e) => setKazanim(e.target.value)}
+              className={alan}
+              data-test="foy-yz-kazanim"
+            >
+              <option value="">Tablodan seçin</option>
+              {kazanimlar.map((s) => (
+                <option key={`${s.kod}-${s.kazanim}`} value={s.kazanim}>
+                  {(s.kod || s.unite || "Kazanım") + " — " + s.kazanim.replace(/^[A-ZÇĞİÖŞÜ0-9.]+\s*/, "").slice(0, 90)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={kazanim}
+              onChange={(e) => setKazanim(e.target.value)}
+              className={alan}
+              placeholder="Doğrulanmamış not"
+              data-test="foy-yz-kazanim"
+            />
+          )}
+        </label>
+        {seciliKazanim ? (
+          <p className="col-span-2 text-[11px] text-slate-600">
+            {[seciliKazanim.unite, seciliKazanim.konu].filter(Boolean).join(" / ")}
+            {seciliKazanim.sinav1.length
+              ? ` · 1. yazılı senaryo soru sayıları: ${seciliKazanim.sinav1.join(", ")}`
+              : " · 1. yazılı senaryo sayıları bu tabloda yok"}
+          </p>
+        ) : null}
+        <label>
+          Zorluk
+          <select value={zorluk} onChange={(e) => setZorluk(e.target.value)} className={alan}>
+            {ZORLUKLAR.map((z) => (
+              <option key={z}>{z}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Soru tipi
+          <select value={soruTipi} onChange={(e) => setSoruTipi(e.target.value)} className={alan}>
+            {SORU_TIPLERI.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </label>
+        <label>
           Adet
-          <select
-            value={adet}
-            onChange={(e) => setAdet(Number(e.target.value))}
-            className="rounded border border-slate-300 px-1 py-1"
-          >
-            {[1, 2, 3, 4, 5].map((n) => (
+          <select value={adet} onChange={(e) => setAdet(Number(e.target.value))} className={alan}>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-1">
-          Zorluk
-          <select
-            value={zorluk}
-            onChange={(e) => setZorluk(e.target.value)}
-            className="rounded border border-slate-300 px-1 py-1"
-          >
-            <option value="kolay">Kolay</option>
-            <option value="ayni">Aynı</option>
-            <option value="zor">Zor</option>
-          </select>
+        <label>
+          Hazırlık düzeyi
+          <input value={hazirlik} onChange={(e) => setHazirlik(e.target.value)} className={alan} />
         </label>
-        <button
-          type="button"
-          onClick={() => void uret()}
-          disabled={calisiyor}
-          className="flex items-center gap-1 rounded-lg bg-dershanem-navy px-3 py-1.5 font-semibold text-white disabled:opacity-60"
-          data-test="foy-yz-uret"
-        >
-          {calisiyor ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          Üret
-        </button>
       </div>
-
-      {hata ? <p className="rounded bg-red-50 p-2 text-xs text-red-700">{hata}</p> : null}
-
+      <button
+        type="button"
+        onClick={() => void uret()}
+        disabled={calisiyor}
+        className="flex items-center gap-1 rounded-lg bg-dershanem-navy px-3 py-1.5 font-semibold text-white disabled:opacity-60"
+        data-test="foy-yz-uret"
+      >
+        {calisiyor ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+        Taslak üret
+      </button>
+      {hata ? <p className="rounded bg-red-50 p-2 text-red-700">{hata}</p> : null}
+      {uyarilar.length > 0 ? (
+        <ul className="rounded bg-amber-50 p-2 text-[11px] text-amber-950">
+          {uyarilar.map((u) => (
+            <li key={u}>• {u}</li>
+          ))}
+        </ul>
+      ) : null}
       {sorular.length > 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-          <p className="mb-2 text-[11px] text-slate-600">
-            Föye eklenecek soruları seçin. Cevap anahtarı ve açıklama föye yazılmaz, yalnız
-            kontrol için gösterilir.
-          </p>
-          <ul className="mb-2 max-h-60 space-y-2 overflow-y-auto">
+        <div>
+          <ul className="mb-2 max-h-80 space-y-2 overflow-y-auto">
             {sorular.map((s, i) => (
-              <li key={i} className="rounded border border-slate-200 bg-white p-2">
+              <li key={`${s.stem.slice(0, 24)}-${i}`} className="rounded border bg-white p-2">
                 <label className="flex items-start gap-2">
                   <input
                     type="checkbox"
@@ -150,30 +259,67 @@ export function FoyYzSoru({
                         return n;
                       })
                     }
-                    className="mt-1"
                   />
-                  <div className="text-xs">
-                    <p className="font-semibold text-slate-800">{s.stem}</p>
-                    <ul className="mt-1 text-slate-600">
-                      {s.options.map((o) => (
-                        <li key={o.label}>
-                          {o.label}) {o.text}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="mt-1 text-[11px] text-emerald-700">
-                      Cevap: {s.answer}
-                      {s.explanation ? ` — ${s.explanation}` : ""}
-                    </p>
-                  </div>
+                  <span className="font-semibold">Kabul et</span>
                 </label>
+                <textarea
+                  value={s.stem}
+                  rows={3}
+                  onChange={(e) =>
+                    setSorular((p) => p.map((x, n) => (n === i ? { ...x, stem: e.target.value } : x)))
+                  }
+                  className="mt-1 w-full rounded border p-1"
+                />
+                {s.options.length > 0 ? (
+                  <ul className="mt-1 text-slate-600">
+                    {s.options.map((o) => (
+                      <li key={o.label}>
+                        {o.label}) {o.text}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p className="mt-1 text-[11px] text-emerald-800">
+                  Cevap: {s.answer || "girilmedi — uydurulmadı"}
+                </p>
+                {cozum.has(i) && s.explanation ? (
+                  <p className="mt-1 text-[11px] text-slate-600">{s.explanation}</p>
+                ) : null}
+                <div className="mt-1 flex flex-wrap gap-1">
+                  <button type="button" className="rounded border px-1.5 py-0.5" onClick={() => void tek(i, zorluk)}>
+                    Yeniden üret
+                  </button>
+                  <button type="button" className="rounded border px-1.5 py-0.5" onClick={() => void tek(i, "Kolay")}>
+                    Daha kolay
+                  </button>
+                  <button type="button" className="rounded border px-1.5 py-0.5" onClick={() => void tek(i, "Zor")}>
+                    Daha zor
+                  </button>
+                  <button type="button" className="rounded border px-1.5 py-0.5" onClick={() => void tek(i, zorluk, true)}>
+                    Benzer soru
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border px-1.5 py-0.5"
+                    onClick={() =>
+                      setCozum((p) => {
+                        const n = new Set(p);
+                        if (n.has(i)) n.delete(i);
+                        else n.add(i);
+                        return n;
+                      })
+                    }
+                  >
+                    Çözümünü göster
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
           <button
             type="button"
             onClick={ekle}
-            className="rounded-lg bg-dershanem-navy px-3 py-1.5 text-xs font-semibold text-white"
+            className="rounded-lg bg-dershanem-navy px-3 py-1.5 font-semibold text-white"
             data-test="foy-yz-ekle"
           >
             Seçili {secili.size} soruyu föye ekle

@@ -114,6 +114,10 @@ export interface PaperSettings {
   documentKind?: string;
   /** Alt bilgideki kurumsal slogan */
   footerSlogan?: string;
+  /** Föy kapağı: "2026–2027". Boşsa eski iki satırlık başlık aynen kalır. */
+  academicYear?: string;
+  /** Alt bilgide isteğe bağlı site */
+  website?: string;
 }
 
 /** Kayıtlı kağıt / test taslağı — soru sırası ve ayarlar */

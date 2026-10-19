@@ -22,9 +22,12 @@ export type DocBlock =
   | { kind: "table"; rows: string[][]; baslikSatiri?: boolean }
   | { kind: "formula"; render: RenderedFormula; latex?: string }
   | { kind: "infoBox"; tone: "bilgi" | "dikkat"; title: string; text: string }
-  | { kind: "answerLines"; count: number }
+  | { kind: "answerLines"; count: number; style?: "lines" | "grid" | "blank" }
   | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number }
-  | { kind: "spacer"; heightMm: number };
+  | { kind: "spacer"; heightMm: number }
+  /** Öğretmenin bilinçli kestiği akış. Yerleşim bunları içerik sanmaz. */
+  | { kind: "pageBreak" }
+  | { kind: "columnBreak" };
 
 const GOVDE_PT = 8.5;
 const SATIR_MM = 4.2;
@@ -106,7 +109,11 @@ export function blokYuksekligi(doc: jsPDF, b: DocBlock, genislikMm: number): num
     }
 
     case "answerLines":
-      return b.count * 7 + 2;
+      return (b.style === "grid" ? 8 : 7) * b.count + 2;
+
+    case "pageBreak":
+    case "columnBreak":
+      return 0;
 
     case "image": {
       const enBoy = Math.min(genislikMm, genislikMm);
@@ -301,14 +308,29 @@ export function blokCiz(
     }
 
     case "answerLines": {
+      if (b.style === "blank") return y + b.count * 7 + 2;
       doc.setDrawColor("#d5dfe9");
       doc.setLineWidth(0.25);
+      if (b.style === "grid") {
+        const hucre = 6;
+        const sutun = Math.max(1, Math.floor(genislikMm / hucre));
+        for (let r = 0; r < b.count; r++) {
+          for (let c = 0; c < sutun; c++) {
+            doc.rect(x + c * hucre, y + 1 + r * 8, hucre, 7);
+          }
+        }
+        return y + b.count * 8 + 2;
+      }
       for (let i = 0; i < b.count; i++) {
         const ly = y + 4 + i * 7;
         doc.line(x, ly, x + genislikMm, ly);
       }
       return y + b.count * 7 + 2;
     }
+
+    case "pageBreak":
+    case "columnBreak":
+      return y;
 
     case "image": {
       let w = genislikMm;
@@ -318,7 +340,8 @@ export function blokCiz(
         h = maxH;
         w = h * b.aspect;
       }
-      doc.addImage(b.dataUrl, "PNG", x + (genislikMm - w) / 2, y, w, h);
+      const bicim = b.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+      doc.addImage(b.dataUrl, bicim, x + (genislikMm - w) / 2, y, w, h);
       return y + h + 3;
     }
   }
@@ -353,6 +376,9 @@ export function sutunaYerlestir(
   let i = 0;
   for (; i < bloklar.length; i++) {
     const b = bloklar[i];
+    if (b.kind === "pageBreak" || b.kind === "columnBreak") {
+      return { yerlesen, kalan: bloklar.slice(i) };
+    }
     const h = blokYuksekligi(doc, b, genislikMm);
     if (y + h > altSinirY) break;
     yerlesen.push({ blok: b, y });

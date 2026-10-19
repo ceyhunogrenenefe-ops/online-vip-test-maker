@@ -1,80 +1,138 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  Download,
-  FileText,
-  Loader2,
-  Plus,
-  Sigma,
-  Trash2,
-} from "lucide-react";
+import { Plus, Redo2, Save, Sigma, Undo2 } from "lucide-react";
 import type { DocBlock } from "@/lib/pdf-blocks";
 import type { PasteBlock } from "@/lib/paste-clean";
-import { blokEtiketi, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
+import { cleanPastedText } from "@/lib/paste-clean";
+import { soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
 import { foyPdfOlustur, foyTeshisMesaji, type FoyTeshis } from "@/lib/foy-pdf";
+import { foyKaliteKontrol, puanOner, soruOgeleriniYenile, type FoyOge } from "@/lib/foy-baski";
+import type { KirpilmisParca as KirpParca } from "./FoyPdfKirp";
+import {
+  kapakSatirlari,
+  kunyeEskiden,
+  varsayilanKunye,
+  varsayilanTasarim,
+  yeniId,
+  type FoyKunye,
+  type FoyTasarim,
+} from "@/lib/foy-kunye";
 import { FormulaEditor } from "@/components/editor/FormulaEditor";
 import { FoyYapistir } from "./FoyYapistir";
 import { FoyFotograf } from "./FoyFotograf";
 import { FoyYzSoru } from "./FoyYzSoru";
-import { getFoyTaslak, saveFoyTaslak } from "@/lib/storage";
-import type { PaperSettings } from "@/types";
+import { FoyKunyeForm } from "./FoyKunyeForm";
+import { FoyTasarimPanel } from "./FoyTasarim";
+import { FoySayfa } from "./FoySayfa";
+import { FoyOnizleme } from "./FoyOnizleme";
+import { FoyPdfKirp, type FoyKirpHandle } from "./FoyPdfKirp";
+import { FoyBanka } from "./FoyBanka";
+import {
+  foyBankaKaydet,
+  foyBelgeListele,
+  foyBelgeOku,
+  foyBelgeYaz,
+  getFoyTaslak,
+  saveFoyTaslak,
+  type FoyBelgeOzet,
+  type FoyTaslak,
+} from "@/lib/storage";
+import { DEFAULT_PAPER_SETTINGS, type PaperSettings } from "@/types";
+import type { UretilenSoru } from "@/lib/soru-uret-ayristir";
 
-type Sekme = "yapistir" | "fotograf" | "bilesen" | "yz";
+type Arac = "kunye" | "pdf" | "kirp" | "gorsel" | "yz" | "metin" | "banka" | "tasarim";
 
-/**
- * Kurumsal föy oluşturma çalışma alanı (Aşama 4).
- *
- * Dört içerik kaynağı (yapıştırma, fotoğraf+OCR, bileşenler, YZ soru)
- * tek blok listesinde birleşir; liste iki sütunlu kurumsal şablona
- * foy-pdf ile akıtılır. Yerleşim mantığı demo sayfasıyla ortak kaynaktan
- * geldiği için ekranda onaylanan föy ile basılan föy ayrışmaz.
- *
- * Öğretmen son söz sahibidir: hiçbir kaynak doğrudan föye yazmaz,
- * her blok silinebilir ve sırası değiştirilebilir, PDF üretiminde
- * sığmayan blok varsa uyarı gösterilir.
- */
+const ARACLAR: [Arac, string][] = [
+  ["kunye", "Doküman bilgileri"],
+  ["pdf", "PDF'den soru al"],
+  ["kirp", "Kırpma aracı"],
+  ["gorsel", "Görsel yükle / yapıştır"],
+  ["yz", "Yapay zekâyla soru üret"],
+  ["metin", "Metin / formül ekle"],
+  ["banka", "Soru bankam"],
+  ["tasarim", "Sayfa ve tasarım"],
+];
+
+type Surum = { guncelleme: number; ogeler: FoyOge[]; ad: string };
+
 export function FoyWorkspace() {
-  const [bloklar, setBloklar] = useState<DocBlock[]>([]);
-  const [sekme, setSekme] = useState<Sekme>("yapistir");
-  const [formulAcik, setFormulAcik] = useState(false);
+  const [kunye, setKunye] = useState<FoyKunye>(() => varsayilanKunye());
+  const [tasarim, setTasarim] = useState<FoyTasarim>(() => varsayilanTasarim());
+  const [ogeler, setOgeler] = useState<FoyOge[]>([]);
+  const [secili, setSecili] = useState(-1);
+  const [arac, setArac] = useState<Arac>("kunye");
+  const [mobil, setMobil] = useState<"arac" | "sayfa" | "onizleme">("sayfa");
+  const [solAcik, setSolAcik] = useState(true);
+  const [sagAcik, setSagAcik] = useState(true);
+  const [solW, setSolW] = useState(340);
+  const [sagW, setSagW] = useState(380);
   const [uyarilar, setUyarilar] = useState<string[]>([]);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [teshis, setTeshis] = useState<FoyTeshis | null>(null);
   const [uretiliyor, setUretiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const [formulAcik, setFormulAcik] = useState(false);
+  const [kayit, setKayit] = useState<"hazir" | "kaydediliyor" | "kaydedildi" | "hata">("hazir");
+  const [adim, setAdim] = useState(0);
+  const [pdfDosya, setPdfDosya] = useState<File | null>(null);
+  const [bankaYenile, setBankaYenile] = useState(0);
+  const [belgeler, setBelgeler] = useState<FoyBelgeOzet[]>([]);
+  const [kalite, setKalite] = useState<{ surum: "ogrenci" | "ogretmen"; notlar: string[] } | null>(null);
+  const [surumListe, setSurumListe] = useState<Surum[]>([]);
 
-  // Föy künyesi — kurumsal şablonun üst şeridi ve alt bilgisi bunu kullanır
-  const [sinif, setSinif] = useState("9. SINIF");
-  const [brans, setBrans] = useState("FİZİK");
-  const [konu, setKonu] = useState("");
-  const [tur, setTur] = useState("Yazılıya Hazırlık Föyü");
-
-  // Taslak otomatik kaydı: sekme yenilenince kurulan föy kaybolmasın.
-  // Formül görselleri data URL olduğu için localStorage yetmez (IndexedDB).
   const yuklendi = useRef(false);
+  const [hazir, setHazir] = useState(false);
+  const ogelerRef = useRef(ogeler);
+  const gecmis = useRef<FoyOge[][]>([]);
+  const ileri = useRef<FoyOge[][]>([]);
+  const belgeId = useRef("");
+  const surumler = useRef<Surum[]>([]);
+  const pano = useRef<FoyOge | null>(null);
+  const kirpRef = useRef<FoyKirpHandle>(null);
+  const pdfUrlRef = useRef<string | null>(null);
+  const indirmeBlob = useRef<Blob | null>(null);
+  ogelerRef.current = ogeler;
+
+  const yenileListe = () => {
+    void foyBelgeListele().then(setBelgeler).catch(() => undefined);
+  };
+
+  const uygulaTaslak = (t: FoyTaslak) => {
+    setKunye(kunyeEskiden(t.kunye));
+    if (t.tasarim && typeof t.tasarim === "object") {
+      setTasarim({ ...varsayilanTasarim(), ...(t.tasarim as FoyTasarim) });
+    }
+    const ham = Array.isArray(t.ogeler) && t.ogeler.length ? (t.ogeler as FoyOge[]) : null;
+    const bloklar = !ham && Array.isArray(t.bloklar) ? (t.bloklar as DocBlock[]) : [];
+    const liste = soruOgeleriniYenile(
+      ham
+        ? ham.map((o) => ({ ...o, id: o.id || yeniId() }))
+        : bloklar.map((blok) => ({ id: yeniId(), blok }))
+    );
+    ogelerRef.current = liste;
+    setOgeler(liste);
+    belgeId.current = t.belgeId || yeniId();
+    surumler.current = (t.surumler as Surum[] | undefined) ?? [];
+    setSurumListe(surumler.current);
+  };
 
   useEffect(() => {
     let iptal = false;
     void (async () => {
       try {
         const t = await getFoyTaslak();
-        if (iptal || !t) return;
-        if (Array.isArray(t.bloklar) && t.bloklar.length) {
-          setBloklar(t.bloklar as DocBlock[]);
-        }
-        if (t.kunye) {
-          setSinif(t.kunye.sinif || "9. SINIF");
-          setBrans(t.kunye.brans || "FİZİK");
-          setKonu(t.kunye.konu || "");
-          setTur(t.kunye.tur || "Yazılıya Hazırlık Föyü");
-        }
+        if (iptal) return;
+        if (t) uygulaTaslak(t);
+        else belgeId.current = yeniId();
+        yenileListe();
       } catch {
-        /* taslak okunamadıysa boş föy ile devam edilir */
+        belgeId.current = belgeId.current || yeniId();
       } finally {
-        if (!iptal) yuklendi.current = true;
+        if (!iptal) {
+          yuklendi.current = true;
+          setHazir(true);
+        }
       }
     })();
     return () => {
@@ -82,363 +140,658 @@ export function FoyWorkspace() {
     };
   }, []);
 
-  useEffect(() => {
-    // İlk yükleme bitmeden yazmak, kayıtlı taslağı boş liste ile ezerdi
-    if (!yuklendi.current) return;
-    const z = setTimeout(() => {
-      void saveFoyTaslak({
-        bloklar,
-        kunye: { sinif, brans, konu, tur },
-        guncelleme: Date.now(),
-      }).catch(() => undefined);
-    }, 600);
-    return () => clearTimeout(z);
-  }, [bloklar, sinif, brans, konu, tur]);
+  const taslak = useCallback((): FoyTaslak => {
+    const bloklar = soruNumaralariniYenile(ogelerRef.current.map((o) => o.blok));
+    return {
+      bloklar,
+      ogeler: ogelerRef.current,
+      tasarim,
+      belgeId: belgeId.current,
+      ad: kunye.dokumanAdi,
+      surumler: surumler.current,
+      guncelleme: Date.now(),
+      kunye: {
+        sinif: `${kunye.sinif}. SINIF`,
+        sinifNo: kunye.sinif,
+        brans: kunye.brans,
+        konu: kunye.konu,
+        tur: kunye.tur,
+        dokumanAdi: kunye.dokumanAdi,
+        egitimYili: kunye.egitimYili,
+        donem: kunye.donem,
+        yazili: kunye.yazili,
+        ogretmen: kunye.ogretmen,
+        website: kunye.website,
+      },
+    };
+  }, [kunye, tasarim]);
 
-  const settings = useMemo(
-    () =>
-      ({
-        corporateTemplate: true,
-        documentKind: tur,
-        classSection: sinif,
-        subjectBranch: brans,
-        topicTitle: konu,
-      }) as unknown as PaperSettings,
-    [tur, sinif, brans, konu]
-  );
-
-  /**
-   * Her içerik kaynağı PasteBlock üretir; dönüşüm ve soru numaralandırma
-   * tek yerde yapılır, böylece kaynaklar arasında numara çakışmaz.
-   */
-  const pasteEkle = useCallback(
-    async (gelen: PasteBlock[]) => {
-      setHata(null);
+  const kaydet = useCallback(
+    async (manuel: boolean) => {
+      if (!yuklendi.current) return;
+      if (!belgeId.current) belgeId.current = yeniId();
+      setKayit("kaydediliyor");
       try {
-        const mevcutSoru = bloklar.filter((b) => b.kind === "question").length;
-        const r = await yapistirmayiBelgeye(gelen, { ilkSoruNo: mevcutSoru + 1 });
-        setBloklar((p) => soruNumaralariniYenile([...p, ...r.bloklar]));
-        if (r.uyarilar.length) setUyarilar((p) => [...p, ...r.uyarilar]);
-      } catch (e) {
-        setHata(e instanceof Error ? e.message : String(e));
+        if (manuel) {
+          const snap: Surum = {
+            guncelleme: Date.now(),
+            ogeler: ogelerRef.current,
+            ad: kunye.dokumanAdi || "Kayıt",
+          };
+          surumler.current = [snap, ...surumler.current].slice(0, 8);
+          setSurumListe(surumler.current);
+        }
+        const t = taslak();
+        await saveFoyTaslak(t);
+        await foyBelgeYaz(belgeId.current, t, {
+          id: belgeId.current,
+          ad: kunye.dokumanAdi || kapakSatirlari(kunye)[3],
+          guncelleme: t.guncelleme,
+          arsiv: false,
+        });
+        setKayit("kaydedildi");
+        yenileListe();
+      } catch {
+        setKayit("hata");
       }
     },
-    [bloklar]
+    [kunye, taslak]
   );
 
-  const blokEkle = (b: DocBlock) => setBloklar((p) => soruNumaralariniYenile([...p, b]));
+  useEffect(() => {
+    if (!yuklendi.current) return;
+    const z = setTimeout(() => void kaydet(false), 700);
+    return () => clearTimeout(z);
+  }, [ogeler, kunye, tasarim, kaydet]);
 
-  const tasi = (i: number, yon: -1 | 1) =>
-    setBloklar((p) => {
-      const j = i + yon;
-      if (j < 0 || j >= p.length) return p;
-      const n = [...p];
-      [n[i], n[j]] = [n[j], n[i]];
-      return soruNumaralariniYenile(n);
-    });
+  const degistir = (sonraki: FoyOge[]) => {
+    gecmis.current.push(ogelerRef.current);
+    if (gecmis.current.length > 50) gecmis.current.shift();
+    ileri.current = [];
+    const n = soruOgeleriniYenile(sonraki);
+    ogelerRef.current = n;
+    setOgeler(n);
+    setAdim((a) => a + 1);
+  };
 
-  const sil = (i: number) =>
-    setBloklar((p) => soruNumaralariniYenile(p.filter((_, j) => j !== i)));
+  const geriAl = () => {
+    const once = gecmis.current.pop();
+    if (!once) return;
+    ileri.current.push(ogelerRef.current);
+    ogelerRef.current = once;
+    setOgeler(once);
+    setAdim((a) => a + 1);
+  };
+  const yinele = () => {
+    const sonra = ileri.current.pop();
+    if (!sonra) return;
+    gecmis.current.push(ogelerRef.current);
+    ogelerRef.current = sonra;
+    setOgeler(sonra);
+    setAdim((a) => a + 1);
+  };
 
-  const pdfUret = async () => {
-    setUretiliyor(true);
+  useEffect(() => {
+    const tus = (e: KeyboardEvent) => {
+      const hedef = e.target as HTMLElement | null;
+      const yaziyor = hedef && (hedef.tagName === "INPUT" || hedef.tagName === "TEXTAREA" || hedef.isContentEditable);
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+      if (e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void kaydet(true);
+      } else if (e.key.toLowerCase() === "z" && !yaziyor) {
+        e.preventDefault();
+        geriAl();
+      } else if (e.key.toLowerCase() === "y" && !yaziyor) {
+        e.preventDefault();
+        yinele();
+      } else if (e.key.toLowerCase() === "c" && !yaziyor && secili >= 0) {
+        pano.current = ogelerRef.current[secili] ?? null;
+      } else if (e.key.toLowerCase() === "v" && !yaziyor && pano.current) {
+        e.preventDefault();
+        const kopya: FoyOge = {
+          ...pano.current,
+          id: yeniId(),
+          blok: { ...pano.current.blok },
+        };
+        const n = [...ogelerRef.current];
+        n.splice(secili + 1, 0, kopya);
+        degistir(n);
+      }
+    };
+    window.addEventListener("keydown", tus);
+    return () => window.removeEventListener("keydown", tus);
+  }, [kaydet, secili]);
+
+  const settings = useMemo(() => {
+    const satir = kapakSatirlari(kunye);
+    return {
+      ...DEFAULT_PAPER_SETTINGS,
+      corporateTemplate: true,
+      academicYear: kunye.egitimYili,
+      documentKind: satir[3],
+      classSection: `${kunye.sinif}. SINIF`,
+      subjectBranch: kunye.brans.toLocaleUpperCase("tr-TR"),
+      topicTitle: kunye.konu,
+      includeTeacherName: Boolean(kunye.ogretmen.trim()),
+      teacherName: kunye.ogretmen,
+      website: kunye.website,
+      orientation: tasarim.yon,
+      columns: tasarim.sutun,
+    } as PaperSettings;
+  }, [kunye, tasarim]);
+
+  const pdfSecenek = useCallback(
+    (surum: "ogrenci" | "ogretmen") => ({
+      sutunSayisi: tasarim.sutun,
+      yon: tasarim.yon,
+      kenarMm: tasarim.kenarMm,
+      soruAraligiMm: tasarim.soruAraligiMm,
+      cozum: tasarim.cozum,
+      cozumSatir: tasarim.cozumSatir,
+      filigran: tasarim.filigran,
+      filigranLogo: tasarim.filigranLogo,
+      surum,
+      cevaplar: surum === "ogretmen" ? ogelerRef.current : [],
+    }),
+    [tasarim]
+  );
+
+  const pdfUret = useCallback(
+    async (surum: "ogrenci" | "ogretmen") => {
+      setUretiliyor(true);
+      setHata(null);
+      try {
+        const bloklar = ogelerRef.current.map((o) => o.blok);
+        const { doc, teshis: t } = await foyPdfOlustur(bloklar, settings, pdfSecenek(surum));
+        setTeshis(t);
+        const blob = doc.output("blob");
+        if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+        const url = URL.createObjectURL(blob);
+        pdfUrlRef.current = url;
+        setPdfUrl(url);
+        return { t, blob };
+      } catch (e) {
+        setHata(e instanceof Error ? e.message : String(e));
+        return null;
+      } finally {
+        setUretiliyor(false);
+      }
+    },
+    [pdfSecenek, settings]
+  );
+
+  useEffect(() => {
+    if (!yuklendi.current) return;
+    const z = setTimeout(() => void pdfUret("ogrenci"), 900);
+    return () => clearTimeout(z);
+  }, [ogeler, kunye, tasarim, pdfUret, hazir]);
+
+  const indir = async (surum: "ogrenci" | "ogretmen") => {
+    const sonuc = await pdfUret(surum);
+    if (!sonuc) return;
+    const cevapsiz = ogelerRef.current.filter((o) => o.blok.kind === "question" && !(o.cevap || "").trim()).length;
+    const notlar = foyKaliteKontrol({
+      bloklar: ogelerRef.current.map((o) => o.blok),
+      ogretmenIndir: surum === "ogretmen",
+      cevapsizSoru: cevapsiz,
+      filigran: tasarim.filigran,
+      teshisDusen: sonuc.t.dusen.length,
+      teshisZorlanan: sonuc.t.zorlanan.length,
+    }).map((n) => n.mesaj);
+    if (notlar.length) {
+      indirmeBlob.current = sonuc.blob;
+      setKalite({ surum, notlar });
+      return;
+    }
+    dosyaIn(sonuc.blob, surum);
+  };
+
+  const dosyaIn = (blob: Blob, surum: "ogrenci" | "ogretmen") => {
+    const ad = (kunye.dokumanAdi || kunye.konu || kunye.brans || "foy").replace(/\s+/g, "-").toLowerCase();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${ad}-${surum}.pdf`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+
+  const pasteEkle = async (gelen: PasteBlock[]) => {
     setHata(null);
-    setTeshis(null);
     try {
-      const { doc, teshis: t } = await foyPdfOlustur(bloklar, settings);
-      setTeshis(t);
-      const blob = doc.output("blob");
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-      setPdfUrl(URL.createObjectURL(blob));
+      const mevcutSoru = ogelerRef.current.filter((o) => o.blok.kind === "question").length;
+      const r = await yapistirmayiBelgeye(gelen, { ilkSoruNo: mevcutSoru + 1 });
+      degistir([
+        ...ogelerRef.current,
+        ...r.bloklar.map((blok) => ({ id: yeniId(), blok })),
+      ]);
+      if (r.uyarilar.length) setUyarilar((p) => [...p, ...r.uyarilar]);
     } catch (e) {
       setHata(e instanceof Error ? e.message : String(e));
-    } finally {
-      setUretiliyor(false);
     }
   };
 
+  const yzKabul = (sorular: UretilenSoru[]) => {
+    const yeni: FoyOge[] = sorular.map((s) => ({
+      id: yeniId(),
+      blok: {
+        kind: "question",
+        stem: [{ text: s.stem }],
+        options: s.options.map((o) => ({ label: o.label, runs: [{ text: o.text }] })),
+      },
+      cevap: s.answer,
+      cozum: s.explanation,
+    }));
+    degistir([...ogelerRef.current, ...yeni]);
+  };
+
+  const kirpEkle = (parcalar: KirpParca[]) => {
+    degistir([
+      ...ogelerRef.current,
+      ...parcalar.map((p) => ({
+        id: yeniId(),
+        blok: {
+          kind: "image" as const,
+          dataUrl: p.dataUrl,
+          aspect: p.aspect,
+          maxHeightMm: 70,
+        },
+        kaynak: p.kaynak,
+      })),
+    ]);
+  };
+
+  const tasi = (i: number, yon: -1 | 1) => {
+    const j = i + yon;
+    if (j < 0 || j >= ogelerRef.current.length) return;
+    const n = [...ogelerRef.current];
+    [n[i], n[j]] = [n[j], n[i]];
+    degistir(n);
+    setSecili(j);
+  };
+
+  const bankaya = async () => {
+    const o = ogelerRef.current[secili];
+    if (!o) return;
+    await foyBankaKaydet({
+      id: yeniId(),
+      ders: kunye.brans,
+      sinif: String(kunye.sinif),
+      konu: kunye.konu,
+      zorluk: "",
+      tip: o.blok.kind,
+      blok: o.blok,
+      olusturma: Date.now(),
+    });
+    setBankaYenile((n) => n + 1);
+    setArac("banka");
+  };
+
+  const puanDagit = () => {
+    const sorular = ogelerRef.current.filter((o) => o.blok.kind === "question");
+    const puanlar = puanOner(sorular.length);
+    let k = 0;
+    degistir(
+      ogelerRef.current.map((o) =>
+        o.blok.kind === "question" ? { ...o, puan: puanlar[k++] } : o
+      )
+    );
+  };
+
+  const belgeAc = async (id: string) => {
+    const t = await foyBelgeOku(id);
+    if (!t) return;
+    gecmis.current = [];
+    ileri.current = [];
+    uygulaTaslak(t);
+  };
+
   const teshisMesaji = teshis ? foyTeshisMesaji(teshis) : null;
-  const dosyaAdi = `foy-${(konu || brans || "ders").replace(/\s+/g, "-").toLowerCase()}.pdf`;
+  const pdfAcik = arac === "pdf" || arac === "kirp";
+
+  const panelSurukle = (e: React.PointerEvent, taraf: "sol" | "sag") => {
+    e.preventDefault();
+    const basX = e.clientX;
+    const ilk = taraf === "sol" ? solW : sagW;
+    const hareket = (ev: PointerEvent) => {
+      const dx = ev.clientX - basX;
+      const hedef = taraf === "sol" ? ilk + dx : ilk - dx;
+      const w = Math.min(520, Math.max(260, hedef));
+      if (taraf === "sol") setSolW(w);
+      else setSagW(w);
+    };
+    const birak = () => {
+      window.removeEventListener("pointermove", hareket);
+      window.removeEventListener("pointerup", birak);
+    };
+    window.addEventListener("pointermove", hareket);
+    window.addEventListener("pointerup", birak);
+  };
 
   return (
-    <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3 lg:flex-row">
-      {/* --- Sol: föy künyesi ve içerik kaynakları --- */}
-      <section className="w-full shrink-0 space-y-3 lg:w-[380px]">
-        <div className="rounded-xl bg-white p-3 shadow-sm">
-          <h2 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-slate-800">
-            <FileText size={16} /> Föy künyesi
-          </h2>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <label className="col-span-2">
-              Doküman türü
-              <input
-                value={tur}
-                onChange={(e) => setTur(e.target.value)}
-                className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1"
-              />
-            </label>
-            <label>
-              Sınıf
-              <input
-                value={sinif}
-                onChange={(e) => setSinif(e.target.value)}
-                className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1"
-              />
-            </label>
-            <label>
-              Branş
-              <input
-                value={brans}
-                onChange={(e) => setBrans(e.target.value)}
-                className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1"
-              />
-            </label>
-            <label className="col-span-2">
-              Konu (boş bırakılırsa konu bandı çizilmez)
-              <input
-                value={konu}
-                onChange={(e) => setKonu(e.target.value)}
-                className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1"
-                data-test="foy-konu"
-              />
-            </label>
-          </div>
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b bg-white px-3 py-2 text-xs">
+        <input
+          value={kunye.dokumanAdi}
+          onChange={(e) => setKunye({ ...kunye, dokumanAdi: e.target.value })}
+          placeholder="Doküman adı"
+          className="w-48 rounded border px-2 py-1"
+        />
+        <span className="text-slate-500">
+          {kayit === "kaydediliyor" ? "Kaydediliyor…" : kayit === "hata" ? "Kayıt hatası" : "Kaydedildi"}
+        </span>
+        <button type="button" onClick={() => void kaydet(true)} className="flex items-center gap-1 rounded border px-2 py-1">
+          <Save size={13} /> Kaydet
+        </button>
+        <button type="button" onClick={geriAl} disabled={!adim || gecmis.current.length === 0} className="rounded border px-2 py-1 disabled:opacity-40">
+          <Undo2 size={13} className="inline" /> Geri al
+        </button>
+        <button type="button" onClick={yinele} className="rounded border px-2 py-1">
+          <Redo2 size={13} className="inline" /> Yinele
+        </button>
+        <button type="button" onClick={() => void bankaya()} disabled={secili < 0} className="rounded border px-2 py-1 disabled:opacity-40">
+          Seçiliyi bankaya kaydet
+        </button>
+        {kunye.tur === "Yazılı Provası" ? (
+          <button type="button" onClick={puanDagit} className="rounded border px-2 py-1">
+            100 puana dağıtımı onayla
+          </button>
+        ) : null}
+        <select
+          className="rounded border px-1 py-1"
+          value=""
+          onChange={(e) => {
+            const i = Number(e.target.value);
+            const s = surumListe[i];
+            if (s) degistir(s.ogeler);
+          }}
+        >
+          <option value="">Önceki sürüm</option>
+          {surumListe.map((s, i) => (
+            <option key={s.guncelleme} value={i}>
+              {new Date(s.guncelleme).toLocaleString("tr-TR")} · {s.ad}
+            </option>
+          ))}
+        </select>
+        <select
+          className="max-w-[180px] rounded border px-1 py-1"
+          value={belgeId.current}
+          onChange={(e) => void belgeAc(e.target.value)}
+        >
+          <option value={belgeId.current}>{kunye.dokumanAdi || "Bu föy"}</option>
+          {belgeler
+            .filter((b) => b.id !== belgeId.current && !b.arsiv)
+            .map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.ad}
+              </option>
+            ))}
+        </select>
+        <button
+          type="button"
+          className="rounded border px-2 py-1"
+          onClick={() => {
+            belgeId.current = yeniId();
+            setKunye({ ...kunye, dokumanAdi: `Kopya — ${kunye.dokumanAdi || "föy"}` });
+            void kaydet(true);
+          }}
+        >
+          Kopyala
+        </button>
+        <button
+          type="button"
+          className="rounded border px-2 py-1"
+          onClick={() => {
+            const id = belgeId.current;
+            void (async () => {
+              const t = taslak();
+              await foyBelgeYaz(id, t, {
+                id,
+                ad: kunye.dokumanAdi || "Arşiv",
+                guncelleme: Date.now(),
+                arsiv: true,
+              });
+              belgeId.current = yeniId();
+              setKunye(varsayilanKunye());
+              setTasarim(varsayilanTasarim());
+              degistir([]);
+              yenileListe();
+            })();
+          }}
+        >
+          Arşivle
+        </button>
+        <span className="text-[11px] text-slate-400">Ctrl+S kaydet · Ctrl+Z geri · Ctrl+Y yinele</span>
+      </div>
 
-        <div className="rounded-xl bg-white p-3 shadow-sm">
+      <div className="flex gap-1 border-b bg-white px-2 py-1 lg:hidden">
+        {(["arac", "sayfa", "onizleme"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMobil(m)}
+            className={`rounded px-2 py-1 text-xs ${mobil === m ? "bg-dershanem-navy text-white" : "bg-slate-100"}`}
+          >
+            {m === "arac" ? "Araçlar" : m === "sayfa" ? "Sayfa" : "Önizleme"}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        <section
+          style={{ width: solW }}
+          className={`shrink-0 overflow-y-auto border-r bg-slate-50 p-2 ${mobil !== "arac" ? "max-lg:hidden" : ""} ${solAcik ? "" : "lg:hidden"}`}
+        >
           <div className="mb-2 flex flex-wrap gap-1">
-            {(
-              [
-                ["yapistir", "Yapıştır"],
-                ["fotograf", "Fotoğraftan"],
-                ["bilesen", "Bileşen"],
-                ["yz", "YZ soru"],
-              ] as [Sekme, string][]
-            ).map(([id, ad]) => (
+            {ARACLAR.map(([id, ad]) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setSekme(id)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                  sekme === id
-                    ? "bg-dershanem-navy text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                onClick={() => setArac(id)}
+                className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${
+                  arac === id ? "bg-dershanem-navy text-white" : "bg-white text-slate-600"
                 }`}
               >
                 {ad}
               </button>
             ))}
           </div>
-
-          {sekme === "yapistir" ? <FoyYapistir onEkle={(b) => void pasteEkle(b)} /> : null}
-          {sekme === "fotograf" ? <FoyFotograf onEkle={(b) => void pasteEkle(b)} /> : null}
-          {sekme === "yz" ? (
-            <FoyYzSoru sinif={sinif} brans={brans} konu={konu} onEkle={(b) => void pasteEkle(b)} />
+          {arac === "kunye" ? <FoyKunyeForm kunye={kunye} onChange={setKunye} /> : null}
+          <div className={pdfAcik ? "" : "hidden"}>
+            <FoyPdfKirp
+              ref={kirpRef}
+              dosya={pdfDosya}
+              onDosya={setPdfDosya}
+              mevcut={ogeler.flatMap((o) => (o.kaynak ? [o.kaynak] : []))}
+              onEkle={kirpEkle}
+              onMetin={(metin) => {
+                const r = cleanPastedText(metin);
+                void pasteEkle(r.blocks);
+              }}
+            />
+          </div>
+          {arac === "gorsel" ? (
+            <div className="space-y-3">
+              <FoyFotograf onEkle={(b) => void pasteEkle(b)} />
+              <FoyYapistir onEkle={(b) => void pasteEkle(b)} />
+            </div>
           ) : null}
-          {sekme === "bilesen" ? (
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  const t = window.prompt("Bölüm başlığı");
-                  if (t && t.trim()) blokEkle({ kind: "sectionTitle", text: t.trim() });
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 hover:bg-slate-50"
-              >
+          {arac === "yz" ? (
+            <FoyYzSoru
+              sinif={`${kunye.sinif}. sınıf`}
+              brans={kunye.brans}
+              konu={kunye.konu}
+              onKabul={yzKabul}
+            />
+          ) : null}
+          {arac === "metin" ? (
+            <div className="space-y-2 text-xs">
+              <FoyYapistir onEkle={(b) => void pasteEkle(b)} />
+              <div className="grid grid-cols-2 gap-2">
+              <button type="button" className="rounded border bg-white px-2 py-2" onClick={() => {
+                const t = window.prompt("Bölüm başlığı");
+                if (t?.trim()) degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "sectionTitle", text: t.trim() } }]);
+              }}>
                 <Plus size={12} className="inline" /> Bölüm başlığı
               </button>
-              <button
-                type="button"
-                onClick={() => setFormulAcik(true)}
-                className="rounded-lg border border-slate-300 px-2 py-2 hover:bg-slate-50"
-                data-test="foy-formul-ac"
-              >
+              <button type="button" className="rounded border bg-white px-2 py-2" data-test="foy-formul-ac" onClick={() => setFormulAcik(true)}>
                 <Sigma size={12} className="inline" /> Formül ekle
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const t = window.prompt("Bilgi kutusu metni");
-                  if (t && t.trim())
-                    blokEkle({ kind: "infoBox", tone: "bilgi", title: "BİLGİ", text: t.trim() });
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 hover:bg-slate-50"
-              >
-                <Plus size={12} className="inline" /> Bilgi kutusu
+              <button type="button" className="rounded border bg-white px-2 py-2" onClick={() => {
+                const n = Number(window.prompt("Kaç cevap satırı?", "4"));
+                if (Number.isFinite(n) && n > 0)
+                  degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "answerLines", count: Math.min(30, Math.round(n)) } }]);
+              }}>
+                Cevap satırı
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const t = window.prompt("Dikkat kutusu metni");
-                  if (t && t.trim())
-                    blokEkle({ kind: "infoBox", tone: "dikkat", title: "DİKKAT!", text: t.trim() });
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 hover:bg-slate-50"
-              >
-                <Plus size={12} className="inline" /> Dikkat kutusu
+              <button type="button" className="rounded border bg-white px-2 py-2" onClick={() => {
+                const t = window.prompt("Bilgi kutusu");
+                if (t?.trim())
+                  degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "infoBox", tone: "bilgi", title: "BİLGİ", text: t.trim() } }]);
+              }}>
+                Bilgi kutusu
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const n = Number(window.prompt("Kaç cevap satırı?", "4"));
-                  if (Number.isFinite(n) && n > 0)
-                    blokEkle({ kind: "answerLines", count: Math.min(30, Math.round(n)) });
-                }}
-                className="rounded-lg border border-slate-300 px-2 py-2 hover:bg-slate-50"
-              >
-                <Plus size={12} className="inline" /> Cevap satırı
-              </button>
-              <button
-                type="button"
-                onClick={() => blokEkle({ kind: "spacer", heightMm: 6 })}
-                className="rounded-lg border border-slate-300 px-2 py-2 hover:bg-slate-50"
-              >
-                <Plus size={12} className="inline" /> Boşluk
-              </button>
+              </div>
             </div>
           ) : null}
-        </div>
-
-        {uyarilar.length > 0 ? (
-          <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-            <div className="mb-1 flex items-center justify-between">
-              <strong>Uyarılar</strong>
-              <button
-                type="button"
-                onClick={() => setUyarilar([])}
-                className="text-[11px] underline"
-              >
-                Temizle
-              </button>
-            </div>
-            <ul className="space-y-0.5">
+          {arac === "banka" ? (
+            <FoyBanka yenileme={bankaYenile} onEkle={(blok) => degistir([...ogelerRef.current, { id: yeniId(), blok }])} />
+          ) : null}
+          {arac === "tasarim" ? <FoyTasarimPanel tasarim={tasarim} onChange={setTasarim} /> : null}
+          {uyarilar.length > 0 ? (
+            <ul className="mt-2 rounded bg-amber-50 p-2 text-[11px] text-amber-900">
               {uyarilar.map((u, i) => (
                 <li key={i}>• {u}</li>
               ))}
             </ul>
-          </div>
-        ) : null}
-      </section>
-
-      {/* --- Orta: blok listesi, teşhis ve PDF --- */}
-      <section className="flex min-w-0 flex-1 flex-col rounded-xl bg-white p-3 shadow-sm">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-800">
-            Föy içeriği{" "}
-            <span className="text-xs font-normal text-slate-500">({bloklar.length} blok)</span>
-          </h2>
-          <div className="flex items-center gap-2">
-            {bloklar.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm("Tüm bloklar silinsin mi?")) setBloklar([]);
-                }}
-                className="text-xs text-red-600 hover:underline"
-              >
-                Tümünü temizle
-              </button>
-            ) : null}
+          ) : null}
+          {secili >= 0 && ogeler[secili]?.kaynak ? (
             <button
               type="button"
-              onClick={() => void pdfUret()}
-              disabled={uretiliyor}
-              className="flex items-center gap-1.5 rounded-lg bg-dershanem-navy px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-              data-test="foy-pdf-uret"
+              className="mt-2 text-xs text-dershanem-navy underline"
+              onClick={() => {
+                const k = ogeler[secili].kaynak;
+                if (!k) return;
+                setArac("kirp");
+                setMobil("arac");
+                kirpRef.current?.odak(k);
+              }}
             >
-              {uretiliyor ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              PDF oluştur
+              Kırpmayı kaynağında düzenle
             </button>
-          </div>
-        </div>
+          ) : null}
+        </section>
 
-        {hata ? <p className="mb-2 rounded bg-red-50 p-2 text-xs text-red-700">{hata}</p> : null}
+        <button
+          type="button"
+          className="hidden w-2 cursor-col-resize bg-slate-200 text-[10px] lg:block"
+          title="Sürükleyerek genişletin, çift tıklayınca kapanır"
+          onDoubleClick={() => setSolAcik((v) => !v)}
+          onPointerDown={(e) => panelSurukle(e, "sol")}
+          aria-label="Sol paneli boyutlandır"
+        >
+          {solAcik ? "‹" : "›"}
+        </button>
 
-        {teshis ? (
-          <div
-            className={`mb-2 rounded p-2 text-xs ${
-              teshisMesaji ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"
-            }`}
-            data-test="foy-teshis"
-          >
-            {teshisMesaji ?? `${teshis.sayfa} sayfa · ${teshis.cizilen} blok yerleşti, hepsi sığdı.`}
-          </div>
-        ) : null}
+        <section className={`min-w-0 flex-1 overflow-y-auto bg-slate-200 p-3 ${mobil !== "sayfa" ? "max-lg:hidden" : ""}`}>
+          {hata ? <p className="mb-2 rounded bg-red-50 p-2 text-xs text-red-700">{hata}</p> : null}
+          {teshis ? (
+            <p
+              className={`mb-2 rounded p-2 text-xs ${teshisMesaji ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}
+              data-test="foy-teshis"
+            >
+              {teshisMesaji ?? `${teshis.sayfa} sayfa hazır.`}
+            </p>
+          ) : null}
+          <FoySayfa
+            kunye={kunye}
+            ogeler={ogeler}
+            secili={secili}
+            prova={kunye.tur === "Yazılı Provası"}
+            onSec={setSecili}
+            onTasi={tasi}
+            onSil={(i) => degistir(ogelerRef.current.filter((_, j) => j !== i))}
+            onBlok={(i, blok) => degistir(ogelerRef.current.map((o, j) => (j === i ? { ...o, blok } : o)))}
+            onCevap={(i, cevap, cozum) =>
+              degistir(ogelerRef.current.map((o, j) => (j === i ? { ...o, cevap, cozum } : o)))
+            }
+            onPuan={(i, puan) => degistir(ogelerRef.current.map((o, j) => (j === i ? { ...o, puan } : o)))}
+            onSayfaSonu={() => degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "pageBreak" } }])}
+            onSutunSonu={() => degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "columnBreak" } }])}
+            onBirak={(kaynak, hedef) => {
+              if (kaynak === hedef) return;
+              const n = [...ogelerRef.current];
+              const [alinan] = n.splice(kaynak, 1);
+              n.splice(hedef, 0, alinan);
+              degistir(n);
+            }}
+          />
+        </section>
 
-        {bloklar.length === 0 ? (
-          <p className="py-10 text-center text-sm text-slate-400">
-            Soldaki araçlarla içerik ekleyin. Eklenen her blok burada listelenir.
-          </p>
-        ) : (
-          <ul className="space-y-1 overflow-y-auto" data-test="foy-blok-listesi">
-            {bloklar.map((b, i) => (
-              <li
-                key={i}
-                className="flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5"
-              >
-                <span className="w-6 shrink-0 text-center text-[10px] text-slate-400">{i + 1}</span>
-                <span className="shrink-0 rounded bg-slate-200 px-1 font-mono text-[10px] text-slate-600">
-                  {b.kind}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs text-slate-700">
-                  {blokEtiketi(b)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => tasi(i, -1)}
-                  disabled={i === 0}
-                  className="text-slate-400 hover:text-slate-700 disabled:opacity-30"
-                  aria-label="Yukarı taşı"
-                >
-                  <ArrowUp size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => tasi(i, 1)}
-                  disabled={i === bloklar.length - 1}
-                  className="text-slate-400 hover:text-slate-700 disabled:opacity-30"
-                  aria-label="Aşağı taşı"
-                >
-                  <ArrowDown size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => sil(i)}
-                  className="text-red-500 hover:text-red-700"
-                  aria-label="Sil"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <button
+          type="button"
+          className="hidden w-2 cursor-col-resize bg-slate-200 text-[10px] lg:block"
+          title="Sürükleyerek genişletin, çift tıklayınca kapanır"
+          onDoubleClick={() => setSagAcik((v) => !v)}
+          onPointerDown={(e) => panelSurukle(e, "sag")}
+          aria-label="Sağ paneli boyutlandır"
+        >
+          {sagAcik ? "›" : "‹"}
+        </button>
 
-        {pdfUrl ? (
-          <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-700">Önizleme</span>
-              <a
-                href={pdfUrl}
-                download={dosyaAdi}
-                className="text-xs font-semibold text-dershanem-navy hover:underline"
-              >
-                PDF indir
-              </a>
-            </div>
-            <iframe src={pdfUrl} className="h-[520px] w-full rounded border" title="Föy önizleme" />
-          </div>
-        ) : null}
-      </section>
+        <section
+          style={{ width: sagW }}
+          className={`shrink-0 overflow-hidden border-l bg-white p-2 ${mobil !== "onizleme" ? "max-lg:hidden" : ""} ${sagAcik ? "" : "lg:hidden"}`}
+        >
+          <FoyOnizleme
+            url={pdfUrl}
+            sayfa={teshis?.sayfa ?? 1}
+            uretiliyor={uretiliyor}
+            hata={hata}
+            onIndirOgrenci={() => void indir("ogrenci")}
+            onIndirOgretmen={() => void indir("ogretmen")}
+          />
+        </section>
+      </div>
 
       {formulAcik ? (
         <FormulaEditor
           onKapat={() => setFormulAcik(false)}
           onKaydet={({ latex, gorsel }) => {
-            blokEkle({ kind: "formula", render: gorsel, latex });
+            degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "formula", render: gorsel, latex } }]);
             setFormulAcik(false);
           }}
         />
+      ) : null}
+
+      {kalite ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-w-md rounded-xl bg-white p-4 text-sm shadow-xl">
+            <h3 className="mb-2 font-bold">İndirmeden önce</h3>
+            <ul className="mb-3 list-disc space-y-1 pl-4 text-xs">
+              {kalite.notlar.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded bg-dershanem-navy px-3 py-1.5 text-xs font-semibold text-white"
+                onClick={() => {
+                  if (indirmeBlob.current) dosyaIn(indirmeBlob.current, kalite.surum);
+                  indirmeBlob.current = null;
+                  setKalite(null);
+                }}
+              >
+                Yine de indir
+              </button>
+              <button type="button" className="rounded border px-3 py-1.5 text-xs" onClick={() => setKalite(null)}>
+                Vazgeç
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

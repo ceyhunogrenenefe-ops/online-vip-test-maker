@@ -5,6 +5,11 @@ export interface EnhanceSettings {
   brightness: number;
   /** 0 – 2 keskinleştirme */
   sharpness: number;
+  /**
+   * Siyah-beyaz fotokopi: gri ton ve beyaza yakın zemini temizler.
+   * Varsayılan kapalı. Metin, sayı ve şekil pikselleri yeniden çizilmez.
+   */
+  photocopy?: boolean;
 }
 
 export const DEFAULT_ENHANCE: EnhanceSettings = {
@@ -21,8 +26,19 @@ export function applyEnhanceToImageData(
   const { contrast, brightness } = settings;
 
   for (let i = 0; i < data.length; i += 4) {
+    if (settings.photocopy) {
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      let v = (gray - 128) * contrast + 128 + brightness;
+      if (v >= 242) v = 255;
+      else if (v <= 18) v = 0;
+      const c = Math.max(0, Math.min(255, v));
+      data[i] = c;
+      data[i + 1] = c;
+      data[i + 2] = c;
+      continue;
+    }
     for (let c = 0; c < 3; c++) {
-      let v = (data[i + c] - 128) * contrast + 128 + brightness;
+      const v = (data[i + c] - 128) * contrast + 128 + brightness;
       data[i + c] = Math.max(0, Math.min(255, v));
     }
   }
