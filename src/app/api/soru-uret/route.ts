@@ -9,7 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { anahtarBicimi } from "@/lib/anahtar-bicimi";
+import { anahtarBicimi, anahtarReddi } from "@/lib/anahtar-bicimi";
 import { MEB_KAYNAK, MEB_YIL, mebKazanimBul, sinifNo } from "@/lib/meb-kazanim";
 import {
   MAX_SORU,
@@ -79,6 +79,9 @@ export async function POST(req: Request) {
       503
     );
   }
+
+  const red = anahtarReddi(anahtarHam);
+  if (red) return hata(red, 503);
 
   let govde: {
     kaynakSoru?: string;
@@ -204,6 +207,7 @@ export async function POST(req: Request) {
    */
   const basliklar = new Headers();
   basliklar.set("content-type", "application/json");
+  basliklar.set("authorization", `Bearer ${anahtar}`);
   basliklar.set("x-api-key", anahtar);
   basliklar.set("anthropic-version", "2023-06-01");
   if (WORKSPACE_ID) basliklar.set("anthropic-workspace-id", WORKSPACE_ID);
