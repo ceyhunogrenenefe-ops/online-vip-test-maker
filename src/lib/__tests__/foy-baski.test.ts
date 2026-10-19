@@ -48,6 +48,16 @@ test("bos cevap uydurulmaz", () => {
   assert.equal(satirlar[1].girildi, false);
 });
 
+test("gorsel soru cevap anahtarina girer, cozum girmez", () => {
+  const satirlar = cevapAnahtariSatirlari([
+    { blok: { kind: "image", dataUrl: "x", aspect: 1, rol: "soru", no: 4 }, cevap: "B" },
+    { blok: { kind: "image", dataUrl: "x", aspect: 1, rol: "cozum" }, cevap: "yok" },
+  ]);
+  assert.equal(satirlar.length, 1);
+  assert.equal(satirlar[0].no, 4);
+  assert.equal(satirlar[0].cevap, "B");
+});
+
 test("puan onerisi toplami 100 eder", () => {
   const p = puanOner(3);
   assert.deepEqual(p, [34, 33, 33]);

@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { blokEtiketi } from "@/lib/foy-icerik";
 import { kapakSatirlari, type FoyKunye } from "@/lib/foy-kunye";
 import type { FoyOge } from "@/lib/foy-baski";
-import type { DocBlock } from "@/lib/pdf-blocks";
+import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
 
 export function FoySayfa({
   kunye,
@@ -108,7 +108,22 @@ export function FoySayfa({
                   </button>
                 </div>
                 {o.blok.kind === "image" ? (
-                  <img src={o.blok.dataUrl} alt="" className="mt-1 max-h-40 w-full object-contain" />
+                  <div className="relative mt-1">
+                    {o.blok.rol === "soru" && o.blok.no ? (
+                      <span className="absolute left-0 top-0 rounded-br bg-[#173b70] px-1.5 py-0.5 text-xs font-bold text-white">
+                        {o.blok.no}
+                      </span>
+                    ) : o.blok.rol === "aciklama" ? (
+                      <span className="absolute left-0 top-0 rounded-br bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        Açıklama
+                      </span>
+                    ) : o.blok.rol === "cozum" ? (
+                      <span className="absolute left-0 top-0 rounded-br bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        Çözüm
+                      </span>
+                    ) : null}
+                    <img src={o.blok.dataUrl} alt="" className="max-h-40 w-full object-contain" />
+                  </div>
                 ) : null}
                 {secili === i ? (
                   <div className="mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
@@ -121,26 +136,48 @@ export function FoySayfa({
                       />
                     ) : null}
                     {o.blok.kind === "image" ? (
-                      <label className="block text-[11px] text-slate-500">
-                        Görsel yüksekliği ({o.blok.maxHeightMm ?? 60} mm)
-                        <input
-                          type="range"
-                          min={20}
-                          max={140}
-                          value={o.blok.maxHeightMm ?? 60}
-                          onChange={(e) =>
-                            onBlok(i, {
-                              kind: "image",
-                              dataUrl: o.blok.kind === "image" ? o.blok.dataUrl : "",
-                              aspect: o.blok.kind === "image" ? o.blok.aspect : 1,
-                              maxHeightMm: Number(e.target.value),
-                            })
-                          }
-                          className="w-full"
-                        />
-                      </label>
+                      <>
+                        <label className="block text-[11px] text-slate-500">
+                          Bu parça
+                          <select
+                            value={o.blok.rol ?? ""}
+                            aria-label="Parça türü"
+                            data-test="foy-gorsel-rol"
+                            onChange={(e) => {
+                              if (o.blok.kind !== "image") return;
+                              const secim = e.target.value;
+                              if (secim !== "soru" && secim !== "aciklama" && secim !== "cozum") {
+                                const { rol: _rol, no: _no, ...kalan } = o.blok;
+                                onBlok(i, kalan);
+                                return;
+                              }
+                              onBlok(i, { ...o.blok, rol: secim as GorselRol });
+                            }}
+                            className="mt-0.5 w-full rounded border px-2 py-1 text-xs"
+                          >
+                            <option value="">Görsel</option>
+                            <option value="soru">Soru</option>
+                            <option value="aciklama">Açıklama</option>
+                            <option value="cozum">Çözüm</option>
+                          </select>
+                        </label>
+                        <label className="block text-[11px] text-slate-500">
+                          Görsel yüksekliği ({o.blok.maxHeightMm ?? 60} mm)
+                          <input
+                            type="range"
+                            min={20}
+                            max={140}
+                            value={o.blok.maxHeightMm ?? 60}
+                            onChange={(e) => {
+                              if (o.blok.kind !== "image") return;
+                              onBlok(i, { ...o.blok, maxHeightMm: Number(e.target.value) });
+                            }}
+                            className="w-full"
+                          />
+                        </label>
+                      </>
                     ) : null}
-                    {o.blok.kind === "question" ? (
+                    {o.blok.kind === "question" || (o.blok.kind === "image" && o.blok.rol === "soru") ? (
                       <div className="grid grid-cols-2 gap-1">
                         <input
                           value={o.cevap || ""}

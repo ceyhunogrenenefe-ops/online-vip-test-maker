@@ -9,6 +9,7 @@ import { DEFAULT_ENHANCE } from "@/lib/image-enhance";
 import { kirpmaCakisiyor, kirpmaParmakizi, type KirpmaAlani } from "@/lib/foy-baski";
 import { ocrTurkce } from "@/lib/ocr-text";
 import { yeniId } from "@/lib/foy-kunye";
+import type { GorselRol } from "@/lib/pdf-blocks";
 
 const MAX_BAYT = 40 * 1024 * 1024;
 
@@ -16,6 +17,7 @@ export type KirpilmisParca = {
   dataUrl: string;
   aspect: number;
   kaynak: KirpmaAlani;
+  rol: GorselRol;
 };
 
 export type FoyKirpHandle = {
@@ -30,10 +32,11 @@ export const FoyPdfKirp = forwardRef<
     dosya: File | null;
     onDosya: (f: File | null) => void;
     mevcut: KirpmaAlani[];
+    sonrakiNo: number;
     onEkle: (parcalar: KirpilmisParca[]) => void;
     onMetin: (metin: string) => void;
   }
->(function FoyPdfKirp({ dosya, onDosya, mevcut, onEkle, onMetin }, ref) {
+>(function FoyPdfKirp({ dosya, onDosya, mevcut, sonrakiNo, onEkle, onMetin }, ref) {
   const [sayfaSayisi, setSayfaSayisi] = useState(0);
   const [sayfa, setSayfa] = useState(1);
   const [olcek, setOlcek] = useState(3);
@@ -48,6 +51,8 @@ export const FoyPdfKirp = forwardRef<
   const [kucuk, setKucuk] = useState<Record<number, string>>({});
   const [ocr, setOcr] = useState<{ gorsel: string; metin: string; guven: number; suphe: boolean } | null>(null);
   const [ocrCalisiyor, setOcrCalisiyor] = useState(false);
+  const [ciziyor, setCiziyor] = useState(false);
+  const [sonEklenen, setSonEklenen] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const baslangic = useRef<{ x: number; y: number } | null>(null);
 
@@ -143,7 +148,12 @@ export const FoyPdfKirp = forwardRef<
     const p = piksel(e);
     if (!p) return;
     baslangic.current = p;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setCiziyor(true);
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* işaretçi yakalanamazsa sürükleme yine de sürer */
+    }
   };
 
   const surukle = (e: React.PointerEvent) => {
@@ -160,6 +170,7 @@ export const FoyPdfKirp = forwardRef<
 
   const bitir = () => {
     baslangic.current = null;
+    setCiziyor(false);
   };
 
   const dosyaSec = (f: File | null) => {
@@ -181,8 +192,8 @@ export const FoyPdfKirp = forwardRef<
 
   const gelistir = fotokopi ? { ...DEFAULT_ENHANCE, photocopy: true, contrast: 1.35 } : DEFAULT_ENHANCE;
 
-  const listeyeAl = async () => {
-    if (!dosya || !sayfaUrl || !aktif) return;
+  const parcaUret = async (rol: GorselRol): Promise<KirpilmisParca | null> => {
+    if (!dosya || !sayfaUrl || !aktif) return null;
     setHata(null);
     const kaynak: KirpmaAlani = {
       pdfAd: dosya.name,
@@ -194,19 +205,32 @@ export const FoyPdfKirp = forwardRef<
     };
     const cakisan = [...mevcut, ...kuyruk.map((k) => k.kaynak)].some((m) => kirpmaCakisiyor(m, kaynak));
     if (cakisan) {
-      setUyari("Bu alan daha önce seçilmişe çok benziyor. Yine de listeye alındı; eklemeden önce bakın.");
+      setUyari("Bu alan daha önce seçilmişe çok benziyor. Yine de eklendi.");
     }
     const dataUrl = await getCroppedImage(sayfaUrl, aktif, gelistir);
     const img = await olc(dataUrl);
-    setKuyruk((p) => [
-      ...p,
-      { id: yeniId(), dataUrl, aspect: img.width / img.height, kaynak },
-    ]);
+    return { dataUrl, aspect: img.width / img.height, kaynak, rol };
+  };
+
+  const dogrudanEkle = async (rol: GorselRol) => {
+    const parca = await parcaUret(rol);
+    if (!parca) return;
+    onEkle([parca]);
+    setSonEklenen(
+      rol === "soru" ? `Soru ${sonrakiNo} föye eklendi.` : rol === "aciklama" ? "Açıklama föye eklendi." : "Çözüm föye eklendi."
+    );
+    setAktif(null);
+  };
+
+  const listeyeAl = async () => {
+    const parca = await parcaUret("soru");
+    if (!parca) return;
+    setKuyruk((p) => [...p, { ...parca, id: yeniId() }]);
   };
 
   const foye = () => {
     if (!kuyruk.length) return;
-    onEkle(kuyruk.map(({ dataUrl, aspect, kaynak }) => ({ dataUrl, aspect, kaynak })));
+    onEkle(kuyruk.map(({ dataUrl, aspect, kaynak, rol }) => ({ dataUrl, aspect, kaynak, rol })));
     setKuyruk([]);
     setOcr(null);
   };
@@ -310,6 +334,7 @@ export const FoyPdfKirp = forwardRef<
               </button>
             ))}
           </div>
+          {sonEklenen ? <p className="rounded bg-emerald-50 p-2 text-emerald-900">{sonEklenen}</p> : null}
           <div className="max-h-[68vh] overflow-auto rounded border bg-slate-100">
             {yukleniyor || !sayfaUrl ? (
               <p className="flex items-center gap-1 p-4 text-slate-500">
@@ -325,21 +350,56 @@ export const FoyPdfKirp = forwardRef<
                   onPointerUp={bitir}
                 >
                   {aktif ? (
-                    <div className="absolute border-2 border-[#d72d42] bg-red-500/10" style={kutu(aktif)} />
+                    <div className="pointer-events-none absolute border-2 border-[#d72d42] bg-red-500/10" style={kutu(aktif)} />
                   ) : null}
                 </div>
+                {aktif && !ciziyor ? (
+                  <div
+                    className="absolute z-20 flex max-w-[220px] flex-col gap-1"
+                    style={{ left: kutu(aktif).left, top: kutu(aktif).top }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void dogrudanEkle("soru")}
+                      className="rounded bg-[#173b70] px-2 py-1 text-left text-[11px] font-bold text-white shadow"
+                      data-test="foy-kirp-secim-ekle"
+                    >
+                      Soru {sonrakiNo} · Föye ekle
+                    </button>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => void dogrudanEkle("aciklama")}
+                        className="rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 shadow"
+                      >
+                        Açıklama
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void dogrudanEkle("cozum")}
+                        className="rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 shadow"
+                      >
+                        Çözüm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void listeyeAl()}
+                        className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-600 shadow"
+                      >
+                        Listeye al
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-1">
-            <button type="button" onClick={() => void listeyeAl()} disabled={!aktif} className="rounded bg-slate-800 px-2 py-1 text-white disabled:opacity-40">
-              Seçimi listeye al
-            </button>
-            <button type="button" onClick={foye} disabled={!kuyruk.length} className="rounded bg-dershanem-navy px-2 py-1 font-semibold text-white disabled:opacity-40" data-test="foy-kirp-ekle">
-              {kuyruk.length ? `${kuyruk.length} kırpmayı sırayla föye ekle` : "Föye ekle"}
-            </button>
-          </div>
           {kuyruk.length > 0 ? (
+            <>
+            <button type="button" onClick={foye} className="rounded bg-dershanem-navy px-2 py-1 font-semibold text-white" data-test="foy-kirp-ekle">
+              {kuyruk.length} kırpmayı sırayla föye ekle
+            </button>
             <ul className="space-y-1">
               {kuyruk.map((k, i) => (
                 <li key={k.id} className="flex items-center gap-2 rounded border p-1">
@@ -348,6 +408,21 @@ export const FoyPdfKirp = forwardRef<
                     {i + 1}. sayfa {k.kaynak.sayfa}
                     <span className="block text-[10px] text-slate-400">{kirpmaParmakizi(k.kaynak)}</span>
                   </span>
+                  <select
+                    value={k.rol}
+                    aria-label="Parça türü"
+                    data-test="foy-kirp-rol"
+                    onChange={(e) =>
+                      setKuyruk((p) =>
+                        p.map((x) => (x.id === k.id ? { ...x, rol: e.target.value as GorselRol } : x))
+                      )
+                    }
+                    className="rounded border px-1 py-0.5 text-[11px]"
+                  >
+                    <option value="soru">Soru</option>
+                    <option value="aciklama">Açıklama</option>
+                    <option value="cozum">Çözüm</option>
+                  </select>
                   <button type="button" className="text-dershanem-navy" onClick={() => void donustur(k.dataUrl)}>
                     Metne dönüştür
                   </button>
@@ -357,6 +432,7 @@ export const FoyPdfKirp = forwardRef<
                 </li>
               ))}
             </ul>
+            </>
           ) : null}
         </>
       ) : null}

@@ -12,6 +12,7 @@ import { blokCiz, blokYuksekligi, type DocBlock } from "./pdf-blocks";
 import { foyYerlesimPlani, planBlokSayisi } from "./foy-yerlesim";
 import { cachedBrandKit, loadBrandKit } from "./brand-kit";
 import { cevapAnahtariSatirlari, foyBaskiBloklari } from "./foy-baski";
+import { numaraliSoruMu } from "./foy-icerik";
 import type { FoyTasarim } from "./foy-kunye";
 import { drawPageWatermark } from "./pdf-watermark";
 import type { PaperSettings } from "@/types";
@@ -127,7 +128,7 @@ export async function foyPdfOlustur(
 
   const plan = foyYerlesimPlani(
     baski,
-    (b) => blokYuksekligi(doc, b, sutunW) + (b.kind === "question" ? aralik : 0),
+    (b) => blokYuksekligi(doc, b, sutunW) + (numaraliSoruMu(b) ? aralik : 0),
     { ustY, altSinir, maksSayfa: FOY_OLCU.maksSayfa, sutunSayisi }
   );
 

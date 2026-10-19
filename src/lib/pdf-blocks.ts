@@ -14,6 +14,9 @@ import type { Run } from "./paste-clean";
  * almayı gerektirir ve jsPDF'te bu mümkün değil.
  */
 
+/** Kırpılmış veya yüklenmiş görselin föydeki işi. */
+export type GorselRol = "soru" | "aciklama" | "cozum";
+
 export type DocBlock =
   | { kind: "sectionTitle"; text: string }
   | { kind: "paragraph"; runs: Run[] }
@@ -23,7 +26,7 @@ export type DocBlock =
   | { kind: "formula"; render: RenderedFormula; latex?: string }
   | { kind: "infoBox"; tone: "bilgi" | "dikkat"; title: string; text: string }
   | { kind: "answerLines"; count: number; style?: "lines" | "grid" | "blank" }
-  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number }
+  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number; rol?: GorselRol; no?: number }
   | { kind: "spacer"; heightMm: number }
   /** Öğretmenin bilinçli kestiği akış. Yerleşim bunları içerik sanmaz. */
   | { kind: "pageBreak" }
@@ -34,6 +37,24 @@ const SATIR_MM = 4.2;
 const BASLIK_H_MM = 7;
 const SORU_BASLIK_H_MM = 6;
 const KUTU_IC_BOSLUK = 3.2;
+
+function gorselBaslik(b: Extract<DocBlock, { kind: "image" }>): string | null {
+  if (b.rol === "aciklama") return "AÇIKLAMA";
+  if (b.rol === "cozum") return "ÇÖZÜM";
+  if (b.rol === "soru") return b.no != null ? String(b.no) : "Soru";
+  return null;
+}
+
+function gorselOlcu(b: Extract<DocBlock, { kind: "image" }>, genislikMm: number) {
+  let w = genislikMm;
+  let h = w / (b.aspect || 1);
+  const maxH = b.maxHeightMm ?? 60;
+  if (h > maxH) {
+    h = maxH;
+    w = Math.min(genislikMm, h * b.aspect);
+  }
+  return { w, h, baslik: gorselBaslik(b) };
+}
 
 function govdeYaz(doc: jsPDF, pt = GOVDE_PT, kalin = false) {
   setTurkishFont(doc, kalin ? "bold" : "normal");
@@ -116,9 +137,8 @@ export function blokYuksekligi(doc: jsPDF, b: DocBlock, genislikMm: number): num
       return 0;
 
     case "image": {
-      const enBoy = Math.min(genislikMm, genislikMm);
-      const h = enBoy / b.aspect;
-      return Math.min(h, b.maxHeightMm ?? 60) + 3;
+      const olcu = gorselOlcu(b, genislikMm);
+      return (olcu.baslik ? SORU_BASLIK_H_MM + 1.5 : 0) + olcu.h + 3;
     }
   }
 }
@@ -333,16 +353,22 @@ export function blokCiz(
       return y;
 
     case "image": {
-      let w = genislikMm;
-      let h = w / b.aspect;
-      const maxH = b.maxHeightMm ?? 60;
-      if (h > maxH) {
-        h = maxH;
-        w = h * b.aspect;
+      const olcu = gorselOlcu(b, genislikMm);
+      let iy = y;
+      if (olcu.baslik) {
+        const kisa = b.rol === "soru";
+        const etiketW = kisa ? 8 : Math.min(genislikMm, 28);
+        doc.setFillColor(KURUMSAL.lacivert);
+        doc.roundedRect(x, y, etiketW, SORU_BASLIK_H_MM, 1, 1, "F");
+        doc.setTextColor("#ffffff");
+        govdeYaz(doc, kisa ? 11 : 8, true);
+        doc.text(olcu.baslik, x + (kisa ? 2.4 : 1.6), y + 4.3);
+        doc.setTextColor("#374151");
+        iy = y + SORU_BASLIK_H_MM + 1.5;
       }
       const bicim = b.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
-      doc.addImage(b.dataUrl, bicim, x + (genislikMm - w) / 2, y, w, h);
-      return y + h + 3;
+      doc.addImage(b.dataUrl, bicim, x + (genislikMm - olcu.w) / 2, iy, olcu.w, olcu.h);
+      return iy + olcu.h + 3;
     }
   }
 }
