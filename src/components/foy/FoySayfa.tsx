@@ -133,7 +133,10 @@ export function FoySayfa({
                     {secili === i ? (
                       <FoyGorselSilgi
                         dataUrl={o.blok.dataUrl}
-                        onUygula={(dataUrl) => onBlok(i, { ...o.blok, dataUrl })}
+                        onUygula={(dataUrl) => {
+                          if (o.blok.kind !== "image") return;
+                          onBlok(i, { ...o.blok, dataUrl });
+                        }}
                       />
                     ) : (
                       <img src={o.blok.dataUrl} alt="" className="max-h-40 w-full object-contain" />
