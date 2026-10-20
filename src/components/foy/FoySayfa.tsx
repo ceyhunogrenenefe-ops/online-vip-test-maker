@@ -77,8 +77,12 @@ export function FoySayfa({
             {ogeler.map((o, i) => (
               <li
                 key={o.id}
-                draggable
+                draggable={!(secili === i && o.blok.kind === "image")}
                 onDragStart={(e) => {
+                  if (secili === i && o.blok.kind === "image") {
+                    e.preventDefault();
+                    return;
+                  }
                   e.dataTransfer.setData("text/plain", String(i));
                   e.dataTransfer.effectAllowed = "move";
                 }}
@@ -114,19 +118,26 @@ export function FoySayfa({
                 {o.blok.kind === "image" ? (
                   <div className="relative mt-1">
                     {o.blok.rol === "soru" && o.blok.no ? (
-                      <span className="absolute left-0 top-0 rounded-br bg-[#173b70] px-1.5 py-0.5 text-xs font-bold text-white">
+                      <span className="pointer-events-none absolute left-0 top-0 rounded-br bg-[#173b70] px-1.5 py-0.5 text-xs font-bold text-white">
                         {o.blok.no}
                       </span>
                     ) : o.blok.rol === "aciklama" ? (
-                      <span className="absolute left-0 top-0 rounded-br bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      <span className="pointer-events-none absolute left-0 top-0 rounded-br bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
                         Açıklama
                       </span>
                     ) : o.blok.rol === "cozum" ? (
-                      <span className="absolute left-0 top-0 rounded-br bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      <span className="pointer-events-none absolute left-0 top-0 rounded-br bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
                         Çözüm
                       </span>
                     ) : null}
-                    <img src={o.blok.dataUrl} alt="" className="max-h-40 w-full object-contain" />
+                    {secili === i ? (
+                      <FoyGorselSilgi
+                        dataUrl={o.blok.dataUrl}
+                        onUygula={(dataUrl) => onBlok(i, { ...o.blok, dataUrl })}
+                      />
+                    ) : (
+                      <img src={o.blok.dataUrl} alt="" className="max-h-40 w-full object-contain" />
+                    )}
                   </div>
                 ) : null}
                 {secili === i ? (
@@ -165,13 +176,6 @@ export function FoySayfa({
                             <option value="cozum">Çözüm</option>
                           </select>
                         </label>
-                        <FoyGorselSilgi
-                          dataUrl={o.blok.dataUrl}
-                          onUygula={(dataUrl) => {
-                            if (o.blok.kind !== "image") return;
-                            onBlok(i, { ...o.blok, dataUrl });
-                          }}
-                        />
                         <label className="block text-[11px] text-slate-500">
                           Görsel yüksekliği ({o.blok.maxHeightMm ?? 60} mm)
                           <input
