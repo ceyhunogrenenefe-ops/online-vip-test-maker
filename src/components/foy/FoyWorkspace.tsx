@@ -5,7 +5,7 @@ import { Plus, Redo2, Save, Sigma, Undo2 } from "lucide-react";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
 import type { PasteBlock } from "@/lib/paste-clean";
 import { cleanPastedText } from "@/lib/paste-clean";
-import { KAZANIM_EKSIK, numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
+import { KAZANIM_EKSIK, kazanimYaz, numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
 import { foyPdfOlustur, foyTeshisMesaji, type FoyTeshis } from "@/lib/foy-pdf";
 import { videoLinkiGecerli, videoQrDataUrl } from "@/lib/video-qr";
 import { foyKaliteKontrol, puanOner, soruOgeleriniYenile, type FoyOge } from "@/lib/foy-baski";
@@ -733,9 +733,7 @@ export function FoyWorkspace() {
                   return;
                 }
                 const sonraki =
-                  soru && seciliKazanim && !varOlan.trim()
-                    ? { ...blok, kazanim: seciliKazanim }
-                    : blok;
+                  soru && seciliKazanim && !varOlan.trim() ? kazanimYaz(blok, seciliKazanim) : blok;
                 setHata(null);
                 degistir([...ogelerRef.current, { id: yeniId(), blok: sonraki }]);
               }}

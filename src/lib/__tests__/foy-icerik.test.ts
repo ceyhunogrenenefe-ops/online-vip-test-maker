@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blokEtiketi, soruNumaralariniYenile, yapistirmayiBelgeye } from "../foy-icerik.ts";
+import { blokEtiketi, kazanimYaz, soruNumaralariniYenile, yapistirmayiBelgeye } from "../foy-icerik.ts";
 import type { PasteBlock } from "../paste-clean.ts";
 import type { DocBlock } from "../pdf-blocks.ts";
 import type { RenderedFormula } from "../latex-render.ts";
@@ -58,6 +58,13 @@ test("yapistirilan sorunun ustune secilen kazanim yazilir", async () => {
   assert.equal(r.bloklar[0].kind === "sectionTitle" ? r.bloklar[0].text : "", "KONU");
   assert.equal(r.bloklar[1].kind === "question" ? r.bloklar[1].kazanim : "", "MAT.8.4.1. Katı basıncını açıklar");
   assert.match(blokEtiketi(r.bloklar[1]), /Soru 1/);
+});
+
+test("kazanim yalniz soru bloklarina yazilir", () => {
+  const soru = kazanimYaz({ kind: "question", stem: [{ text: "a" }], options: [] }, " MAT.7.1.1 ");
+  const baslik = kazanimYaz({ kind: "sectionTitle", text: "KONU" }, "MAT.7.1.1");
+  assert.equal(soru.kind === "question" ? soru.kazanim : "", "MAT.7.1.1");
+  assert.equal(baslik.kind, "sectionTitle");
 });
 
 test("ilkSoruNo ile numaralandirma kaldigi yerden devam eder", async () => {

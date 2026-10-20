@@ -39,6 +39,14 @@ export function kazanimSatiri(b: DocBlock): string {
   return k ? `Kazanım: ${k}` : "";
 }
 
+/** Kazanım yalnız soru ve soru görselinde durur. Diğer blok türlerine yazılmaz. */
+export function kazanimYaz(b: DocBlock, metin: string): DocBlock {
+  const kazanim = metin.trim() || undefined;
+  if (b.kind === "question") return { ...b, kazanim };
+  if (b.kind === "image" && b.rol === "soru") return { ...b, kazanim };
+  return b;
+}
+
 async function varsayilanFormulCiz(latex: string): Promise<RenderedFormula> {
   // Tembel yükleme: MathJax yalnızca gerçekten formül varsa yüklenir,
   // böylece bu modül Node testlerinde bağımlılık çekmez.
