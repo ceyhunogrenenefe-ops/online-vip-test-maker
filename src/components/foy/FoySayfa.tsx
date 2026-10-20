@@ -7,6 +7,7 @@ import type { FoyOge } from "@/lib/foy-baski";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
 import { videoLinkiGecerli } from "@/lib/video-qr";
 import { FoyGorselSilgi } from "./FoyGorselSilgi";
+import { FoyKazanimSec } from "./FoyKazanimSec";
 
 export function FoySayfa({
   kunye,
@@ -154,16 +155,13 @@ export function FoySayfa({
                 {secili === i ? (
                   <div className="mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
                     {o.blok.kind === "question" || (o.blok.kind === "image" && o.blok.rol === "soru") ? (
-                      <label className="block text-[11px] font-semibold text-amber-950">
-                        Kazanım — sorunun üstünde
-                        <textarea
-                          value={o.blok.kazanim || ""}
-                          rows={2}
-                          data-test="foy-soru-kazanim-duzenle"
-                          onChange={(e) => onBlok(i, kazanimYaz(o.blok, e.target.value))}
-                          className="mt-0.5 w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-normal text-slate-800"
-                        />
-                      </label>
+                      <FoyKazanimSec
+                        sinif={kunye.sinif}
+                        brans={kunye.brans}
+                        value={o.blok.kazanim || ""}
+                        onChange={(kazanim) => onBlok(i, kazanimYaz(o.blok, kazanim))}
+                        sade
+                      />
                     ) : null}
                     {o.blok.kind === "question" || o.blok.kind === "paragraph" || o.blok.kind === "sectionTitle" ? (
                       <textarea

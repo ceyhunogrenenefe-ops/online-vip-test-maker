@@ -11,14 +11,27 @@ export function FoyKazanimSec({
   brans,
   value,
   onChange,
+  sade = false,
 }: {
   sinif: string | number;
   brans: string;
   value: string;
   onChange: (kazanim: string) => void;
+  /** Soru kartında kısa seçim. Yine yüklü listeden gelir. */
+  sade?: boolean;
 }) {
   const kazanimlar = useMemo(() => mebKazanimlari(sinif, brans), [sinif, brans]);
   const secili = kazanimlar.find((s) => s.kazanim === value) || null;
+  const gruplar = useMemo(() => {
+    const map = new Map<string, typeof kazanimlar>();
+    for (const s of kazanimlar) {
+      const ad = s.unite || "Kazanımlar";
+      const liste = map.get(ad) || [];
+      liste.push(s);
+      map.set(ad, liste);
+    }
+    return [...map.entries()];
+  }, [kazanimlar]);
 
   useEffect(() => {
     if (value && kazanimlar.length && !kazanimlar.some((s) => s.kazanim === value)) onChange("");
@@ -29,10 +42,12 @@ export function FoyKazanimSec({
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 p-2" data-test="foy-kazanim-kutu">
       <label className="block text-xs font-semibold text-amber-950">
-        Kazanım — sorudan önce
-        <span className="mt-0.5 block font-normal text-amber-900">
-          Öğrenci bu yazıyı sorunun üstünde görür. Soru yapıştırılsa da kazanım kaybolmaz.
-        </span>
+        {sade ? "Kazanım" : "Kazanım — sorudan önce"}
+        {sade ? null : (
+          <span className="mt-0.5 block font-normal text-amber-900">
+            Yüklü tablodan seçin. Öğrenci bu kazanımı sorunun üstünde görür.
+          </span>
+        )}
         {kazanimlar.length ? (
           <select
             value={kazanimlar.some((s) => s.kazanim === value) ? value : ""}
@@ -40,24 +55,23 @@ export function FoyKazanimSec({
             className={alan}
             data-test="foy-kazanim"
           >
-            <option value="">Önce kazanımı seçin</option>
-            {kazanimlar.map((s) => (
-              <option key={`${s.kod}-${s.kazanim}`} value={s.kazanim}>
-                {(s.kod || s.unite || "Kazanım") +
-                  " — " +
-                  s.kazanim.replace(/^[A-ZÇĞİÖŞÜ0-9.]+\s*/, "").slice(0, 90)}
-              </option>
+            <option value="">Tablodan kazanım seçin</option>
+            {gruplar.map(([unite, satirlar]) => (
+              <optgroup key={unite} label={unite}>
+                {satirlar.map((s) => (
+                  <option key={`${s.kod}-${s.kazanim}`} value={s.kazanim}>
+                    {(s.kod || "Kazanım") +
+                      " — " +
+                      s.kazanim.replace(/^[A-ZÇĞİÖŞÜ0-9.]+\s*/, "").slice(0, 110)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         ) : (
-          <textarea
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            rows={2}
-            placeholder="Bu sınıf ve ders için resmî tablo yok. Kazanımı buraya yazın."
-            className={alan}
-            data-test="foy-kazanim"
-          />
+          <p className="mt-1 font-normal text-amber-900" data-test="foy-kazanim-yok">
+            Bu sınıf ve ders için yüklü kazanım tablosu yok.
+          </p>
         )}
       </label>
       {secili ? (
