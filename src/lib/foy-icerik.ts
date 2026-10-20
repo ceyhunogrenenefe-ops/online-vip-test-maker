@@ -117,6 +117,8 @@ export function blokEtiketi(b: DocBlock): string {
       return `${b.tone === "dikkat" ? "Dikkat" : "Bilgi"} kutusu: ${b.title}`;
     case "answerLines":
       return `Cevap satırı (${b.count})`;
+    case "qr":
+      return "Video çözüm karekodu";
     case "image":
       if (b.rol === "aciklama") return "Açıklama";
       if (b.rol === "cozum") return "Çözüm";

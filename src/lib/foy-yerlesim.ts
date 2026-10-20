@@ -23,6 +23,9 @@ export type YerlesenBlok = {
   y: number;
   /** Sütuna sığmadığı halde zorla yerleştirildi mi */
   zorlandi: boolean;
+  /** Sayfa genişliğini kullanır; iki sütunun arasına çizgi girmez */
+  tamGenislik?: boolean;
+  yukseklikMm?: number;
 };
 
 export type FoySayfaPlani = {
@@ -47,15 +50,20 @@ export type FoyPlanSecenek = {
   maksSayfa: number;
   /** Sayfa başına sütun sayısı */
   sutunSayisi?: number;
+  /**
+   * Sığmayan çözüm boşluğunu kısaltır. Soru sırası değişmez.
+   * Sütun dibinde koca boşluk bırakıp tüm satırları sonraya atmaz.
+   */
+  akilli?: boolean;
 };
 
 /**
  * Blokları sütunlara ve sayfalara akıtır.
- * @param olc blok yüksekliğini mm olarak döndürür
+ * @param olc blok yüksekliğini mm olarak döndürür. İkinci argüman sayfa genişliğinde ölçüldüğünü söyler.
  */
 export function foyYerlesimPlani(
   bloklar: DocBlock[],
-  olc: (blok: DocBlock) => number,
+  olc: (blok: DocBlock, tamGenislik?: boolean) => number,
   secenek: FoyPlanSecenek
 ): FoyPlan {
   const sutunSayisi = Math.max(1, secenek.sutunSayisi ?? 2);
@@ -67,7 +75,25 @@ export function foyYerlesimPlani(
     const sutunlar: YerlesenBlok[][] = Array.from({ length: sutunSayisi }, () => []);
     let s = 0;
     let y = secenek.ustY;
+    /** İki sütunun yeniden başladığı çizgi. Geniş soru bunun üstündedir. */
+    let taban = secenek.ustY;
     let sayfaKapandi = false;
+
+    const koy = (blok: DocBlock, indeks: number, yy: number, zorlandi: boolean, tam: boolean) => {
+      const h = olc(blok, tam);
+      const hedef = tam ? 0 : s;
+      sutunlar[hedef].push({
+        blok,
+        indeks,
+        y: yy,
+        zorlandi,
+        tamGenislik: tam || undefined,
+        yukseklikMm: h,
+      });
+      return h;
+    };
+
+    const bantBos = () => !sutunlar[s].some((v) => !v.tamGenislik && v.y >= taban - 0.01);
 
     while (i < bloklar.length && !sayfaKapandi) {
       const blok = bloklar[i];
@@ -80,29 +106,73 @@ export function foyYerlesimPlani(
       if (blok.kind === "columnBreak") {
         i++;
         s += 1;
-        y = secenek.ustY;
+        y = taban;
         if (s >= sutunSayisi) sayfaKapandi = true;
         continue;
       }
 
-      const h = olc(blok);
+      if (sutunSayisi > 1 && blok.tamGenislik) {
+        const dip = sutunlar.flat().reduce((d, v) => Math.max(d, v.y + (v.yukseklikMm ?? olc(v.blok, v.tamGenislik))), taban);
+        let aday: DocBlock = blok;
+        let h = olc(aday, true);
+        if (dip + h > secenek.altSinir && secenek.akilli && blok.kind === "answerLines" && blok.count > 1) {
+          const kalan = secenek.altSinir - dip;
+          for (let n = blok.count - 1; n >= 1; n--) {
+            const kisa: DocBlock = { ...blok, count: n };
+            if (olc(kisa, true) <= kalan) {
+              aday = kisa;
+              h = olc(kisa, true);
+              break;
+            }
+          }
+        }
+        if (dip + h > secenek.altSinir && dip > secenek.ustY) {
+          sayfaKapandi = true;
+          continue;
+        }
+        const zorlandi = dip + h > secenek.altSinir;
+        if (zorlandi) zorlanan.push(i);
+        const yerH = koy(aday, i, dip, zorlandi, true);
+        taban = dip + yerH;
+        y = taban;
+        s = 0;
+        i++;
+        continue;
+      }
+
+      const h = olc(blok, false);
+      if (y + h > secenek.altSinir && secenek.akilli && blok.kind === "answerLines" && blok.count > 1) {
+        const kalan = secenek.altSinir - y;
+        let sigan: DocBlock | null = null;
+        for (let n = blok.count - 1; n >= 1; n--) {
+          const kisa: DocBlock = { ...blok, count: n };
+          if (olc(kisa, false) <= kalan) {
+            sigan = kisa;
+            break;
+          }
+        }
+        if (sigan) {
+          y += koy(sigan, i, y, false, false);
+          i++;
+          continue;
+        }
+      }
       if (y + h > secenek.altSinir) {
         // Sütun boşken bile sığmıyorsa blok bir sütundan uzundur.
         // Atlanırsa içerik eksilir; sığdırmadan çizilir ve bildirilir.
         // Eski davranış: zorlanan bloktan sonra aynı sütuna devam edilmez.
-        if (sutunlar[s].length === 0) {
-          sutunlar[s].push({ blok, indeks: i, y, zorlandi: true });
+        if (bantBos()) {
+          koy(blok, i, y, true, false);
           zorlanan.push(i);
           i++;
         }
         s += 1;
-        y = secenek.ustY;
+        y = taban;
         if (s >= sutunSayisi) sayfaKapandi = true;
         continue;
       }
 
-      sutunlar[s].push({ blok, indeks: i, y, zorlandi: false });
-      y += h;
+      y += koy(blok, i, y, false, false);
       i++;
     }
 

@@ -79,6 +79,18 @@ export function FoyTasarimPanel({
           />
         </label>
       </div>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={tasarim.akilliYerlesim}
+          onChange={(e) => set("akilliYerlesim", e.target.checked)}
+          data-test="foy-akilli-yerlesim"
+        />
+        Akıllı yerleştirme
+      </label>
+      <p className="text-[11px] text-slate-500">
+        Sütunun dibine sığmayan çözüm boşluğu kısalır. Soru sırası değişmez; boş kağıt azalır.
+      </p>
       <label className="block">
         Çözüm alanı
         <select
@@ -94,7 +106,7 @@ export function FoyTasarimPanel({
       </label>
       {tasarim.cozum !== "yok" ? (
         <label className="block">
-          Çözüm alanı satırı
+          Sorunun altındaki çözüm boşluğu (satır)
           <input
             type="number"
             min={1}

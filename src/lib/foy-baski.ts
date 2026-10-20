@@ -23,18 +23,40 @@ export function cozumStili(cozum: FoyTasarim["cozum"]): CozumStili | null {
  * satırı varsa ikinci kez eklemez. Sayfa sonu, sorunun çözümünden
  * sonraya kalır.
  */
-export function foyBaskiBloklari(bloklar: DocBlock[], tasarim: Pick<FoyTasarim, "cozum" | "cozumSatir">): DocBlock[] {
-  const stil = cozumStili(tasarim.cozum);
-  if (!stil) return bloklar;
-  const adet = Math.min(30, Math.max(1, Math.round(tasarim.cozumSatir) || 4));
+export type BaskiEk = {
+  /** Bu sorunun çözüm satırı. Boşsa tasarımın satırı kullanılır. 0 satır eklemez. */
+  cozumSatir?: number;
+  qr?: DocBlock;
+};
+
+export function foyBaskiBloklari(
+  bloklar: DocBlock[],
+  tasarim: Pick<FoyTasarim, "cozum" | "cozumSatir">,
+  ek?: BaskiEk[]
+): DocBlock[] {
+  const genelStil = cozumStili(tasarim.cozum);
+  const genelAdet = Math.min(30, Math.max(1, Math.round(tasarim.cozumSatir) || 4));
+  const qrVar = ek?.some((e) => e?.qr);
+  const ozelVar = ek?.some((e) => e?.cozumSatir != null);
+  if (!genelStil && !qrVar && !ozelVar) return bloklar;
   const out: DocBlock[] = [];
   for (let i = 0; i < bloklar.length; i++) {
     const b = bloklar[i];
-    out.push(b);
-    if (b.kind !== "question") continue;
+    const onceki = out[out.length - 1];
+    const devral =
+      onceki?.tamGenislik && (b.kind === "answerLines" || b.kind === "qr") ? true : b.tamGenislik;
+    out.push(devral ? { ...b, tamGenislik: true } : b);
+    const soru = b.kind === "question" || (b.kind === "image" && b.rol === "soru");
+    if (!soru) continue;
     const sonraki = bloklar[i + 1];
-    if (sonraki?.kind === "answerLines") continue;
-    out.push({ kind: "answerLines", count: adet, style: stil });
+    const ozel = ek?.[i]?.cozumSatir;
+    const stil = genelStil ?? (ozel != null && ozel > 0 ? "lines" : null);
+    const adet =
+      ozel == null ? (genelStil ? genelAdet : 0) : Math.min(30, Math.max(0, Math.round(ozel)));
+    if (stil && adet > 0 && sonraki?.kind !== "answerLines") {
+      out.push({ kind: "answerLines", count: adet, style: stil, tamGenislik: b.tamGenislik });
+    }
+    if (ek?.[i]?.qr) out.push({ ...ek[i].qr, tamGenislik: b.tamGenislik } as DocBlock);
   }
   return out;
 }
@@ -87,6 +109,10 @@ export type FoyOge = {
   cevap?: string;
   cozum?: string;
   puan?: number;
+  /** Bu soruya özel çözüm satırı. Boşsa sayfa tasarımındaki satır kullanılır. */
+  cozumSatir?: number;
+  /** Video çözüm bağlantısı. Geçerliyse sayfada karekod olarak basılır. */
+  videoUrl?: string;
   kaynak?: KirpmaAlani;
 };
 

@@ -104,6 +104,54 @@ test("tek sutun modu dolunca yeni sayfa acar", () => {
   assert.equal(plan.sayfalar[0].sutunlar.length, 1);
 });
 
+const olcSatir = (b: DocBlock) => {
+  if (b.kind === "spacer") return b.heightMm;
+  if (b.kind === "answerLines") return 7 * b.count + 2;
+  return 10;
+};
+
+test("akilli yerlesim sigmayan cozum boslugunu ayni sutunda kisaltir", () => {
+  const satir: DocBlock = { kind: "answerLines", count: 8, style: "lines" };
+  const dar = { ustY: 0, altSinir: 100, maksSayfa: 5, sutunSayisi: 2 as const };
+  const plan = foyYerlesimPlani([blok(70), satir], olcSatir, { ...dar, akilli: true });
+  const sutun = plan.sayfalar[0].sutunlar[0];
+  assert.equal(sutun.length, 2);
+  assert.equal(sutun[1].blok.kind, "answerLines");
+  if (sutun[1].blok.kind === "answerLines") assert.equal(sutun[1].blok.count, 4);
+  assert.equal(plan.sayfalar[0].sutunlar[1].length, 0);
+});
+
+test("akilli kapaliyken cozum boslugu sonraki sutuna gecer", () => {
+  const satir: DocBlock = { kind: "answerLines", count: 8, style: "lines" };
+  const dar = { ustY: 0, altSinir: 100, maksSayfa: 5, sutunSayisi: 2 as const };
+  const plan = foyYerlesimPlani([blok(70), satir], olcSatir, dar);
+  assert.equal(plan.sayfalar[0].sutunlar[0].length, 1);
+  assert.equal(plan.sayfalar[0].sutunlar[1].length, 1);
+  assert.equal(plan.sayfalar[0].sutunlar[1][0].blok.kind, "answerLines");
+  if (plan.sayfalar[0].sutunlar[1][0].blok.kind === "answerLines") {
+    assert.equal(plan.sayfalar[0].sutunlar[1][0].blok.count, 8);
+  }
+});
+
+test("genis soru sayfa genisliginde durur, altindakiler iki sutuna bolunur", () => {
+  const olcGenis = (b: DocBlock, tam?: boolean) => (tam ? 10 : b.kind === "spacer" ? b.heightMm : 10);
+  const genis: DocBlock = { kind: "spacer", heightMm: 50, tamGenislik: true };
+  const plan = foyYerlesimPlani([genis, blok(80), blok(120)], olcGenis, {
+    ustY: 0,
+    altSinir: 200,
+    maksSayfa: 3,
+    sutunSayisi: 2,
+  });
+  const c0 = plan.sayfalar[0].sutunlar[0];
+  const c1 = plan.sayfalar[0].sutunlar[1];
+  assert.equal(c0[0].tamGenislik, true);
+  assert.equal(c0[0].yukseklikMm, 10);
+  assert.equal(c0[1].y, 10);
+  assert.equal(c0[1].indeks, 1);
+  assert.equal(c1[0].y, 10);
+  assert.equal(c1[0].indeks, 2);
+});
+
 test("indeksler kaynak siraya sadik kalir", () => {
   const plan = foyYerlesimPlani(Array.from({ length: 7 }, () => blok(90)), olc, SECENEK);
   const hepsi = plan.sayfalar.flatMap((s) => s.sutunlar.flat()).map((x) => x.indeks);

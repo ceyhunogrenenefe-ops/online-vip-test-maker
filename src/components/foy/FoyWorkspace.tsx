@@ -7,6 +7,7 @@ import type { PasteBlock } from "@/lib/paste-clean";
 import { cleanPastedText } from "@/lib/paste-clean";
 import { numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
 import { foyPdfOlustur, foyTeshisMesaji, type FoyTeshis } from "@/lib/foy-pdf";
+import { videoLinkiGecerli, videoQrDataUrl } from "@/lib/video-qr";
 import { foyKaliteKontrol, puanOner, soruOgeleriniYenile, type FoyOge } from "@/lib/foy-baski";
 import type { KirpilmisParca as KirpParca } from "./FoyPdfKirp";
 import {
@@ -290,6 +291,7 @@ export function FoyWorkspace() {
       soruAraligiMm: tasarim.soruAraligiMm,
       cozum: tasarim.cozum,
       cozumSatir: tasarim.cozumSatir,
+      akilliYerlesim: tasarim.akilliYerlesim,
       filigran: tasarim.filigran,
       filigranLogo: tasarim.filigranLogo,
       surum,
@@ -303,8 +305,21 @@ export function FoyWorkspace() {
       setUretiliyor(true);
       setHata(null);
       try {
-        const bloklar = ogelerRef.current.map((o) => o.blok);
-        const { doc, teshis: t } = await foyPdfOlustur(bloklar, settings, pdfSecenek(surum));
+        const ogeler = ogelerRef.current;
+        const bloklar = ogeler.map((o) => o.blok);
+        const baskiEk = await Promise.all(
+          ogeler.map(async (o) => {
+            const url = o.videoUrl ? videoLinkiGecerli(o.videoUrl) : null;
+            if (!url) return { cozumSatir: o.cozumSatir };
+            try {
+              const dataUrl = await videoQrDataUrl(url);
+              return { cozumSatir: o.cozumSatir, qr: { kind: "qr" as const, dataUrl, url } };
+            } catch {
+              return { cozumSatir: o.cozumSatir };
+            }
+          })
+        );
+        const { doc, teshis: t } = await foyPdfOlustur(bloklar, settings, { ...pdfSecenek(surum), baskiEk });
         setTeshis(t);
         const blob = doc.output("blob");
         if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
@@ -725,6 +740,9 @@ export function FoyWorkspace() {
               degistir(ogelerRef.current.map((o, j) => (j === i ? { ...o, cevap, cozum } : o)))
             }
             onPuan={(i, puan) => degistir(ogelerRef.current.map((o, j) => (j === i ? { ...o, puan } : o)))}
+            onSoruAyar={(i, kismi) =>
+              degistir(ogelerRef.current.map((o, j) => (j === i ? { ...o, ...kismi } : o)))
+            }
             onSayfaSonu={() => degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "pageBreak" } }])}
             onSutunSonu={() => degistir([...ogelerRef.current, { id: yeniId(), blok: { kind: "columnBreak" } }])}
             onBirak={(kaynak, hedef) => {

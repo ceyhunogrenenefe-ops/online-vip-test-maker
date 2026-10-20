@@ -18,19 +18,20 @@ import type { Run } from "./paste-clean";
 export type GorselRol = "soru" | "aciklama" | "cozum";
 
 export type DocBlock =
-  | { kind: "sectionTitle"; text: string }
-  | { kind: "paragraph"; runs: Run[] }
-  | { kind: "list"; ordered: boolean; items: Run[][] }
-  | { kind: "question"; no?: number; stem: Run[]; options: { label: string; runs: Run[] }[] }
-  | { kind: "table"; rows: string[][]; baslikSatiri?: boolean }
-  | { kind: "formula"; render: RenderedFormula; latex?: string }
-  | { kind: "infoBox"; tone: "bilgi" | "dikkat"; title: string; text: string }
-  | { kind: "answerLines"; count: number; style?: "lines" | "grid" | "blank" }
-  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number; rol?: GorselRol; no?: number }
-  | { kind: "spacer"; heightMm: number }
+  | { kind: "sectionTitle"; text: string; tamGenislik?: boolean }
+  | { kind: "paragraph"; runs: Run[]; tamGenislik?: boolean }
+  | { kind: "list"; ordered: boolean; items: Run[][]; tamGenislik?: boolean }
+  | { kind: "question"; no?: number; stem: Run[]; options: { label: string; runs: Run[] }[]; tamGenislik?: boolean }
+  | { kind: "table"; rows: string[][]; baslikSatiri?: boolean; tamGenislik?: boolean }
+  | { kind: "formula"; render: RenderedFormula; latex?: string; tamGenislik?: boolean }
+  | { kind: "infoBox"; tone: "bilgi" | "dikkat"; title: string; text: string; tamGenislik?: boolean }
+  | { kind: "answerLines"; count: number; style?: "lines" | "grid" | "blank"; tamGenislik?: boolean }
+  | { kind: "qr"; dataUrl: string; url: string; tamGenislik?: boolean }
+  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number; rol?: GorselRol; no?: number; tamGenislik?: boolean }
+  | { kind: "spacer"; heightMm: number; tamGenislik?: boolean }
   /** Öğretmenin bilinçli kestiği akış. Yerleşim bunları içerik sanmaz. */
-  | { kind: "pageBreak" }
-  | { kind: "columnBreak" };
+  | { kind: "pageBreak"; tamGenislik?: boolean }
+  | { kind: "columnBreak"; tamGenislik?: boolean };
 
 const GOVDE_PT = 8.5;
 const SATIR_MM = 4.2;
@@ -131,6 +132,9 @@ export function blokYuksekligi(doc: jsPDF, b: DocBlock, genislikMm: number): num
 
     case "answerLines":
       return (b.style === "grid" ? 8 : 7) * b.count + 2;
+
+    case "qr":
+      return 30;
 
     case "pageBreak":
     case "columnBreak":
@@ -325,6 +329,20 @@ export function blokCiz(
         doc.text(l, x + KUTU_IC_BOSLUK + 1, y + 9.2 + i * SATIR_MM)
       );
       return y + h + 3;
+    }
+
+    case "qr": {
+      const kenar = Math.min(22, genislikMm);
+      const bicim = b.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+      doc.addImage(b.dataUrl, bicim, x, y, kenar, kenar);
+      govdeYaz(doc, 8, true);
+      doc.setTextColor(KURUMSAL.lacivert);
+      doc.text("Video çözüm", x + kenar + 2, y + 6);
+      govdeYaz(doc, 7);
+      doc.setTextColor("#374151");
+      const adres = satirlariBol(doc, b.url, genislikMm - kenar - 3).slice(0, 3);
+      adres.forEach((l, i) => doc.text(l, x + kenar + 2, y + 11 + i * 3.6));
+      return y + Math.max(kenar, 18) + 4;
     }
 
     case "answerLines": {
