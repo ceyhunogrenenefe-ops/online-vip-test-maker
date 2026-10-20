@@ -23,6 +23,12 @@ test("serbest metin resmî kazanım sayılmaz", () => {
   assert.equal(mebKazanimBul(7, "Matematik", "kesirlerde problem çözme"), null);
 });
 
+test("10. sinif felsefe yüklü tablodan secilir", () => {
+  const liste = mebKazanimlari(10, "Felsefe");
+  assert.ok(liste.length >= 5);
+  assert.ok(liste.every((s) => s.ders === "Felsefe"));
+});
+
 test("geometri tablosu bu pakette yok", () => {
   assert.equal(mebKazanimlari(9, "Geometri").length, 0);
 });

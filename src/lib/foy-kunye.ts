@@ -39,6 +39,7 @@ export const BRANS_ONERILERI = [
   "Coğrafya",
   "İngilizce",
   "Din Kültürü ve Ahlak Bilgisi",
+  "Felsefe",
 ] as const;
 
 export type FoyKunye = {

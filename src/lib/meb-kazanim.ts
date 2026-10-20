@@ -43,6 +43,7 @@ const DERSLER: Record<string, string[]> = {
   cografya: ["cografya"],
   ingilizce: ["ingilizce"],
   "din kulturu ve ahlak bilgisi": ["din kulturu ve ahlak bilgisi"],
+  felsefe: ["felsefe"],
 };
 
 export function sinifNo(sinif: number | string): number {
