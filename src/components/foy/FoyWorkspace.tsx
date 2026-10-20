@@ -5,7 +5,7 @@ import { Plus, Redo2, Save, Sigma, Undo2 } from "lucide-react";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
 import type { PasteBlock } from "@/lib/paste-clean";
 import { cleanPastedText } from "@/lib/paste-clean";
-import { numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
+import { KAZANIM_EKSIK, numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
 import { foyPdfOlustur, foyTeshisMesaji, type FoyTeshis } from "@/lib/foy-pdf";
 import { videoLinkiGecerli, videoQrDataUrl } from "@/lib/video-qr";
 import { foyKaliteKontrol, puanOner, soruOgeleriniYenile, type FoyOge } from "@/lib/foy-baski";
@@ -20,6 +20,7 @@ import {
   type FoyTasarim,
 } from "@/lib/foy-kunye";
 import { FormulaEditor } from "@/components/editor/FormulaEditor";
+import { FoyKazanimSec } from "./FoyKazanimSec";
 import { FoyYapistir } from "./FoyYapistir";
 import { FoyFotograf } from "./FoyFotograf";
 import { FoyYzSoru } from "./FoyYzSoru";
@@ -59,6 +60,7 @@ type Surum = { guncelleme: number; ogeler: FoyOge[]; ad: string };
 
 export function FoyWorkspace() {
   const [kunye, setKunye] = useState<FoyKunye>(() => varsayilanKunye());
+  const [kazanim, setKazanim] = useState("");
   const [tasarim, setTasarim] = useState<FoyTasarim>(() => varsayilanTasarim());
   const [ogeler, setOgeler] = useState<FoyOge[]>([]);
   const [secili, setSecili] = useState(-1);
@@ -91,6 +93,8 @@ export function FoyWorkspace() {
   const surumler = useRef<Surum[]>([]);
   const pano = useRef<FoyOge | null>(null);
   const kirpRef = useRef<FoyKirpHandle>(null);
+  const kazanimRef = useRef("");
+  kazanimRef.current = kazanim;
   const pdfUrlRef = useRef<string | null>(null);
   const indirmeBlob = useRef<Blob | null>(null);
   ogelerRef.current = ogeler;
@@ -374,9 +378,18 @@ export function FoyWorkspace() {
 
   const pasteEkle = async (gelen: PasteBlock[]) => {
     setHata(null);
+    const soruVar = gelen.some((b) => b.kind === "question");
+    const seciliKazanim = kazanimRef.current.trim();
+    if (soruVar && !seciliKazanim) {
+      setHata(KAZANIM_EKSIK);
+      return false;
+    }
     try {
       const mevcutSoru = ogelerRef.current.filter((o) => o.blok.kind === "question").length;
-      const r = await yapistirmayiBelgeye(gelen, { ilkSoruNo: mevcutSoru + 1 });
+      const r = await yapistirmayiBelgeye(gelen, {
+        ilkSoruNo: mevcutSoru + 1,
+        kazanim: seciliKazanim,
+      });
       degistir([
         ...ogelerRef.current,
         ...r.bloklar.map((blok) => ({ id: yeniId(), blok })),
@@ -388,12 +401,18 @@ export function FoyWorkspace() {
   };
 
   const yzKabul = (sorular: UretilenSoru[]) => {
+    const seciliKazanim = kazanimRef.current.trim();
+    if (!seciliKazanim) {
+      setHata(KAZANIM_EKSIK);
+      return;
+    }
     const yeni: FoyOge[] = sorular.map((s) => ({
       id: yeniId(),
       blok: {
         kind: "question",
         stem: [{ text: s.stem }],
         options: s.options.map((o) => ({ label: o.label, runs: [{ text: o.text }] })),
+        kazanim: seciliKazanim,
       },
       cevap: s.answer,
       cozum: s.explanation,
@@ -401,31 +420,47 @@ export function FoyWorkspace() {
     degistir([...ogelerRef.current, ...yeni]);
   };
 
-  const gorselBlok = (dataUrl: string, aspect: number, rol: GorselRol): DocBlock => ({
+  const gorselBlok = (dataUrl: string, aspect: number, rol: GorselRol, kazanimMetni = ""): DocBlock => ({
     kind: "image",
     dataUrl,
     aspect: aspect || 1,
     maxHeightMm: 70,
     rol,
+    ...(rol === "soru" && kazanimMetni ? { kazanim: kazanimMetni } : {}),
   });
 
   const kirpEkle = (parcalar: KirpParca[]) => {
+    const seciliKazanim = kazanimRef.current.trim();
+    if (parcalar.some((p) => p.rol === "soru") && !seciliKazanim) {
+      setHata(KAZANIM_EKSIK);
+      return;
+    }
+    setHata(null);
     degistir([
       ...ogelerRef.current,
       ...parcalar.map((p) => ({
         id: yeniId(),
-        blok: gorselBlok(p.dataUrl, p.aspect, p.rol),
+        blok: gorselBlok(p.dataUrl, p.aspect, p.rol, seciliKazanim),
         kaynak: p.kaynak,
       })),
     ]);
   };
 
   const gorselEkle = (dataUrl: string, rol: GorselRol) => {
+    const seciliKazanim = kazanimRef.current.trim();
+    if (rol === "soru" && !seciliKazanim) {
+      setHata(KAZANIM_EKSIK);
+      return;
+    }
+    setHata(null);
     const img = new Image();
     img.onload = () => {
       degistir([
         ...ogelerRef.current,
-        { id: yeniId(), blok: gorselBlok(dataUrl, img.naturalWidth / Math.max(1, img.naturalHeight), rol) },
+        {
+          id: yeniId(),
+          blok: gorselBlok(dataUrl, img.naturalWidth / Math.max(1, img.naturalHeight), rol, seciliKazanim),
+        },
       ]);
     };
     img.src = dataUrl;
@@ -636,20 +671,26 @@ export function FoyWorkspace() {
           {arac === "kunye" ? <FoyKunyeForm kunye={kunye} onChange={setKunye} /> : null}
           {arac === "gorsel" ? (
             <div className="space-y-3">
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
               <FoyFotograf onEkle={(b) => void pasteEkle(b)} onGorsel={gorselEkle} />
               <FoyYapistir onEkle={(b) => void pasteEkle(b)} />
             </div>
           ) : null}
           {arac === "yz" ? (
-            <FoyYzSoru
-              sinif={`${kunye.sinif}. sınıf`}
-              brans={kunye.brans}
-              konu={kunye.konu}
-              onKabul={yzKabul}
-            />
+            <div className="space-y-2">
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+              <FoyYzSoru
+                sinif={`${kunye.sinif}. sınıf`}
+                brans={kunye.brans}
+                konu={kunye.konu}
+                kazanim={kazanim}
+                onKabul={yzKabul}
+              />
+            </div>
           ) : null}
           {arac === "metin" ? (
             <div className="space-y-2 text-xs">
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
               <FoyYapistir onEkle={(b) => void pasteEkle(b)} />
               <div className="grid grid-cols-2 gap-2">
               <button type="button" className="rounded border bg-white px-2 py-2" onClick={() => {
@@ -679,7 +720,27 @@ export function FoyWorkspace() {
             </div>
           ) : null}
           {arac === "banka" ? (
-            <FoyBanka yenileme={bankaYenile} onEkle={(blok) => degistir([...ogelerRef.current, { id: yeniId(), blok }])} />
+            <div className="space-y-2">
+            <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+            <FoyBanka
+              yenileme={bankaYenile}
+              onEkle={(blok) => {
+                const soru = blok.kind === "question" || (blok.kind === "image" && blok.rol === "soru");
+                const seciliKazanim = kazanimRef.current.trim();
+                const varOlan = (blok.kind === "question" || blok.kind === "image" ? blok.kazanim : "") || "";
+                if (soru && !seciliKazanim && !varOlan.trim()) {
+                  setHata(KAZANIM_EKSIK);
+                  return;
+                }
+                const sonraki =
+                  soru && seciliKazanim && !varOlan.trim()
+                    ? { ...blok, kazanim: seciliKazanim }
+                    : blok;
+                setHata(null);
+                degistir([...ogelerRef.current, { id: yeniId(), blok: sonraki }]);
+              }}
+            />
+            </div>
           ) : null}
           {arac === "tasarim" ? <FoyTasarimPanel tasarim={tasarim} onChange={setTasarim} /> : null}
           {uyarilar.length > 0 ? (
@@ -800,6 +861,9 @@ export function FoyWorkspace() {
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className="mb-3">
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+            </div>
             <FoyPdfKirp
               ref={kirpRef}
               dosya={pdfDosya}

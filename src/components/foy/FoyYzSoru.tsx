@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
-import { MEB_YIL, mebKazanimlari } from "@/lib/meb-kazanim";
 import {
   SORU_TIPLERI,
   ZORLUKLAR,
@@ -18,19 +17,18 @@ export function FoyYzSoru({
   sinif,
   brans,
   konu,
+  kazanim,
   onKabul,
 }: {
   sinif: string;
   brans: string;
   konu: string;
+  kazanim: string;
   onKabul: (sorular: UretilenSoru[]) => void;
 }) {
   const [komut, setKomut] = useState("");
   const [kaynak, setKaynak] = useState("");
   const [altKonu, setAltKonu] = useState("");
-  const [kazanim, setKazanim] = useState("");
-  const kazanimlar = useMemo(() => mebKazanimlari(sinif, brans), [sinif, brans]);
-  const seciliKazanim = kazanimlar.find((s) => s.kazanim === kazanim) || null;
   const [adet, setAdet] = useState(3);
   const [zorluk, setZorluk] = useState<string>("Orta");
   const [soruTipi, setSoruTipi] = useState<string>("Açık uçlu");
@@ -41,10 +39,6 @@ export function FoyYzSoru({
   const [uyarilar, setUyarilar] = useState<string[]>([]);
   const [calisiyor, setCalisiyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (kazanim && !kazanimlar.some((s) => s.kazanim === kazanim)) setKazanim("");
-  }, [kazanim, kazanimlar]);
 
   const iste = async (govde: Record<string, unknown>) => {
     const r = await fetch("/api/soru-uret", {
@@ -72,6 +66,10 @@ export function FoyYzSoru({
   };
 
   const uret = async () => {
+    if (!kazanim.trim()) {
+      setHata("Önce kazanımı seçin. Üretilen sorunun üstünde öğrenci bu kazanımı görecek.");
+      return;
+    }
     if (!komut.trim() && !kaynak.trim()) {
       setHata("Komut yazın veya örnek soru yapıştırın.");
       return;
@@ -134,9 +132,7 @@ export function FoyYzSoru({
     <div className="space-y-2 text-xs">
       <p className="text-[11px] text-slate-500">
         Telifli kaynak metni ve öğrenci bilgisi yapıştırmayın. Üretilen taslak onayınız olmadan föye girmez.
-        {kazanimlar.length
-          ? ` Kazanım listesi ODSGM ${MEB_YIL} 1. dönem konu soru dağılım tablosundan gelir. Seçilen çıktı tabloda kayıtlıdır; üretilen soru MEB onayı değildir.`
-          : " Bu sınıf ve ders için yüklü resmî tablo yok. Serbest kazanım notu doğrulanmış sayılmaz."}
+        Seçilen kazanım her sorunun üstünde basılır; üretilen soru MEB onayı değildir.
       </p>
       <textarea
         value={komut}
@@ -155,44 +151,10 @@ export function FoyYzSoru({
         data-test="foy-yz-kaynak"
       />
       <div className="grid grid-cols-2 gap-1">
-        <label>
+        <label className="col-span-2">
           Alt konu
           <input value={altKonu} onChange={(e) => setAltKonu(e.target.value)} className={alan} />
         </label>
-        <label className="col-span-2">
-          Kazanım
-          {kazanimlar.length ? (
-            <select
-              value={kazanim}
-              onChange={(e) => setKazanim(e.target.value)}
-              className={alan}
-              data-test="foy-yz-kazanim"
-            >
-              <option value="">Tablodan seçin</option>
-              {kazanimlar.map((s) => (
-                <option key={`${s.kod}-${s.kazanim}`} value={s.kazanim}>
-                  {(s.kod || s.unite || "Kazanım") + " — " + s.kazanim.replace(/^[A-ZÇĞİÖŞÜ0-9.]+\s*/, "").slice(0, 90)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={kazanim}
-              onChange={(e) => setKazanim(e.target.value)}
-              className={alan}
-              placeholder="Doğrulanmamış not"
-              data-test="foy-yz-kazanim"
-            />
-          )}
-        </label>
-        {seciliKazanim ? (
-          <p className="col-span-2 text-[11px] text-slate-600">
-            {[seciliKazanim.unite, seciliKazanim.konu].filter(Boolean).join(" / ")}
-            {seciliKazanim.sinav1.length
-              ? ` · 1. yazılı senaryo soru sayıları: ${seciliKazanim.sinav1.join(", ")}`
-              : " · 1. yazılı senaryo sayıları bu tabloda yok"}
-          </p>
-        ) : null}
         <label>
           Zorluk
           <select value={zorluk} onChange={(e) => setZorluk(e.target.value)} className={alan}>

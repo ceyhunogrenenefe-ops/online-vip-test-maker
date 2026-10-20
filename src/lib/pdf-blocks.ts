@@ -21,13 +21,13 @@ export type DocBlock =
   | { kind: "sectionTitle"; text: string; tamGenislik?: boolean }
   | { kind: "paragraph"; runs: Run[]; tamGenislik?: boolean }
   | { kind: "list"; ordered: boolean; items: Run[][]; tamGenislik?: boolean }
-  | { kind: "question"; no?: number; stem: Run[]; options: { label: string; runs: Run[] }[]; tamGenislik?: boolean }
+  | { kind: "question"; no?: number; stem: Run[]; options: { label: string; runs: Run[] }[]; tamGenislik?: boolean; kazanim?: string }
   | { kind: "table"; rows: string[][]; baslikSatiri?: boolean; tamGenislik?: boolean }
   | { kind: "formula"; render: RenderedFormula; latex?: string; tamGenislik?: boolean }
   | { kind: "infoBox"; tone: "bilgi" | "dikkat"; title: string; text: string; tamGenislik?: boolean }
   | { kind: "answerLines"; count: number; style?: "lines" | "grid" | "blank"; tamGenislik?: boolean }
   | { kind: "qr"; dataUrl: string; url: string; tamGenislik?: boolean }
-  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number; rol?: GorselRol; no?: number; tamGenislik?: boolean }
+  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number; rol?: GorselRol; no?: number; tamGenislik?: boolean; kazanim?: string }
   | { kind: "spacer"; heightMm: number; tamGenislik?: boolean }
   /** Öğretmenin bilinçli kestiği akış. Yerleşim bunları içerik sanmaz. */
   | { kind: "pageBreak"; tamGenislik?: boolean }
@@ -78,6 +78,36 @@ function satirlariBol(doc: jsPDF, metin: string, genislikMm: number): string[] {
   return doc.splitTextToSize(metin, genislikMm) as string[];
 }
 
+/** Kazanım sorunun üstünde basılır; öğrenci yapıştırılan soruda da bunu görür. */
+function kazanimSatirlari(doc: jsPDF, metin: string | undefined, genislikMm: number): string[] {
+  const t = (metin || "").trim();
+  if (!t) return [];
+  return satirlariBol(doc, `Kazanım: ${t}`, Math.max(12, genislikMm - 4));
+}
+
+function kazanimYukseklik(satirlar: string[]): number {
+  if (!satirlar.length) return 0;
+  return 1.4 + satirlar.length * SATIR_MM + 1.6;
+}
+
+function kazanimCiz(
+  doc: jsPDF,
+  satirlar: string[],
+  x: number,
+  y: number,
+  genislikMm: number
+): number {
+  if (!satirlar.length) return y;
+  const h = kazanimYukseklik(satirlar) - 1.2;
+  doc.setFillColor("#fff6e8");
+  doc.roundedRect(x, y, genislikMm, h, 1.2, 1.2, "F");
+  doc.setTextColor("#9a3412");
+  govdeYaz(doc, 7.5, true);
+  satirlar.forEach((l, i) => doc.text(l, x + 2, y + 3.6 + i * SATIR_MM));
+  doc.setTextColor("#374151");
+  return y + kazanimYukseklik(satirlar);
+}
+
 /* ------------------------------------------------------------------ */
 /* ÖLÇ                                                                 */
 /* ------------------------------------------------------------------ */
@@ -106,7 +136,7 @@ export function blokYuksekligi(doc: jsPDF, b: DocBlock, genislikMm: number): num
 
     case "question": {
       const kok = satirlariBol(doc, runlariDuzMetne(b.stem), genislikMm - 6);
-      let h = SORU_BASLIK_H_MM + 2 + kok.length * SATIR_MM + 1.5;
+      let h = kazanimYukseklik(kazanimSatirlari(doc, b.kazanim, genislikMm)) + SORU_BASLIK_H_MM + 2 + kok.length * SATIR_MM + 1.5;
       for (const o of b.options) {
         const satir = satirlariBol(doc, runlariDuzMetne(o.runs), genislikMm - 10);
         h += Math.max(SATIR_MM, satir.length * SATIR_MM);
@@ -142,7 +172,9 @@ export function blokYuksekligi(doc: jsPDF, b: DocBlock, genislikMm: number): num
 
     case "image": {
       const olcu = gorselOlcu(b, genislikMm);
-      return (olcu.baslik ? SORU_BASLIK_H_MM + 1.5 : 0) + olcu.h + 3;
+      const kazanimH =
+        b.rol === "soru" ? kazanimYukseklik(kazanimSatirlari(doc, b.kazanim, genislikMm)) : 0;
+      return kazanimH + (olcu.baslik ? SORU_BASLIK_H_MM + 1.5 : 0) + olcu.h + 3;
     }
   }
 }
@@ -235,18 +267,19 @@ export function blokCiz(
     }
 
     case "question": {
+      const ySoru = kazanimCiz(doc, kazanimSatirlari(doc, b.kazanim, genislikMm), x, y, genislikMm);
       doc.setFillColor("#dce9f6");
-      doc.roundedRect(x, y, genislikMm, SORU_BASLIK_H_MM, 1.6, 1.6, "F");
+      doc.roundedRect(x, ySoru, genislikMm, SORU_BASLIK_H_MM, 1.6, 1.6, "F");
       doc.setTextColor(KURUMSAL.lacivert);
       govdeYaz(doc, 8, true);
       doc.text(
         b.no != null ? `SORU ${String(b.no).padStart(2, "0")}` : "SORU",
         x + 3,
-        y + 4.1
+        ySoru + 4.1
       );
       doc.setTextColor("#374151");
 
-      let imlecY = runlariYaz(doc, b.stem, x + 1, y + SORU_BASLIK_H_MM + 4.5, genislikMm - 6);
+      let imlecY = runlariYaz(doc, b.stem, x + 1, ySoru + SORU_BASLIK_H_MM + 4.5, genislikMm - 6);
       imlecY += 1;
 
       for (const o of b.options) {
@@ -372,17 +405,21 @@ export function blokCiz(
 
     case "image": {
       const olcu = gorselOlcu(b, genislikMm);
-      let iy = y;
+      const yGorsel =
+        b.rol === "soru"
+          ? kazanimCiz(doc, kazanimSatirlari(doc, b.kazanim, genislikMm), x, y, genislikMm)
+          : y;
+      let iy = yGorsel;
       if (olcu.baslik) {
         const kisa = b.rol === "soru";
         const etiketW = kisa ? 8 : Math.min(genislikMm, 28);
         doc.setFillColor(KURUMSAL.lacivert);
-        doc.roundedRect(x, y, etiketW, SORU_BASLIK_H_MM, 1, 1, "F");
+        doc.roundedRect(x, yGorsel, etiketW, SORU_BASLIK_H_MM, 1, 1, "F");
         doc.setTextColor("#ffffff");
         govdeYaz(doc, kisa ? 11 : 8, true);
-        doc.text(olcu.baslik, x + (kisa ? 2.4 : 1.6), y + 4.3);
+        doc.text(olcu.baslik, x + (kisa ? 2.4 : 1.6), yGorsel + 4.3);
         doc.setTextColor("#374151");
-        iy = y + SORU_BASLIK_H_MM + 1.5;
+        iy = yGorsel + SORU_BASLIK_H_MM + 1.5;
       }
       const bicim = b.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
       doc.addImage(b.dataUrl, bicim, x + (genislikMm - olcu.w) / 2, iy, olcu.w, olcu.h);

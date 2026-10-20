@@ -49,6 +49,17 @@ test("sorular sirayla numaralanir", async () => {
   assert.equal(r.sonrakiSoruNo, 4);
 });
 
+test("yapistirilan sorunun ustune secilen kazanim yazilir", async () => {
+  const soru: PasteBlock = { kind: "question", stem: [{ text: "Basınç nedir?" }], options: [] };
+  const r = await yapistirmayiBelgeye(
+    [{ kind: "heading", level: 2, text: "KONU" }, soru],
+    { formulCiz: cizOk, kazanim: " MAT.8.4.1. Katı basıncını açıklar " }
+  );
+  assert.equal(r.bloklar[0].kind === "sectionTitle" ? r.bloklar[0].text : "", "KONU");
+  assert.equal(r.bloklar[1].kind === "question" ? r.bloklar[1].kazanim : "", "MAT.8.4.1. Katı basıncını açıklar");
+  assert.match(blokEtiketi(r.bloklar[1]), /Soru 1/);
+});
+
 test("ilkSoruNo ile numaralandirma kaldigi yerden devam eder", async () => {
   const soru: PasteBlock = { kind: "question", stem: [{ text: "x" }], options: [] };
   const r = await yapistirmayiBelgeye([soru], { ilkSoruNo: 7, formulCiz: cizOk });
