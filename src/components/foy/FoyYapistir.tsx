@@ -15,7 +15,7 @@ import { cleanFromClipboard, type PasteBlock } from "@/lib/paste-clean";
 export function FoyYapistir({
   onEkle,
 }: {
-  onEkle: (bloklar: PasteBlock[]) => void;
+  onEkle: (bloklar: PasteBlock[]) => void | boolean | Promise<void | boolean>;
 }) {
   const [bekleyen, setBekleyen] = useState<PasteBlock[] | null>(null);
   const [uyarilar, setUyarilar] = useState<string[]>([]);
@@ -65,9 +65,11 @@ export function FoyYapistir({
             <button
               type="button"
               onClick={() => {
-                onEkle(bekleyen);
-                setBekleyen(null);
-                setUyarilar([]);
+                void Promise.resolve(onEkle(bekleyen)).then((sonuc) => {
+                  if (sonuc === false) return;
+                  setBekleyen(null);
+                  setUyarilar([]);
+                });
               }}
               className="flex items-center gap-1 rounded-lg bg-dershanem-navy px-3 py-1.5 text-xs font-semibold text-white"
               data-test="foy-yapistir-onayla"

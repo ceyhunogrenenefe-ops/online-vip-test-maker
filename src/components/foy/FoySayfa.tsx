@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
-import { blokEtiketi } from "@/lib/foy-icerik";
+import { blokEtiketi, kazanimSatiri } from "@/lib/foy-icerik";
 import { kapakSatirlari, type FoyKunye } from "@/lib/foy-kunye";
 import type { FoyOge } from "@/lib/foy-baski";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
@@ -97,6 +97,14 @@ export function FoySayfa({
                   secili === i ? "border-[#173b70] bg-slate-50" : "border-slate-200"
                 }`}
               >
+                {secili !== i && kazanimSatiri(o.blok) ? (
+                  <p
+                    className="mb-1 rounded bg-amber-50 px-2 py-1 text-[11px] font-semibold leading-snug text-amber-950"
+                    data-test="foy-soru-kazanim"
+                  >
+                    {kazanimSatiri(o.blok)}
+                  </p>
+                ) : null}
                 <div className="flex items-center gap-1">
                   <span className="w-5 text-center text-[10px] text-slate-400">{i + 1}</span>
                   <span className="min-w-0 flex-1 truncate text-xs">{blokEtiketi(o.blok)}</span>
@@ -145,6 +153,21 @@ export function FoySayfa({
                 ) : null}
                 {secili === i ? (
                   <div className="mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                    {o.blok.kind === "question" || (o.blok.kind === "image" && o.blok.rol === "soru") ? (
+                      <label className="block text-[11px] font-semibold text-amber-950">
+                        Kazanım — sorunun üstünde
+                        <textarea
+                          value={o.blok.kazanim || ""}
+                          rows={2}
+                          data-test="foy-soru-kazanim-duzenle"
+                          onChange={(e) => {
+                            const yazilan = e.target.value;
+                            onBlok(i, { ...o.blok, kazanim: yazilan.trim() ? yazilan : undefined });
+                          }}
+                          className="mt-0.5 w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-normal text-slate-800"
+                        />
+                      </label>
+                    ) : null}
                     {o.blok.kind === "question" || o.blok.kind === "paragraph" || o.blok.kind === "sectionTitle" ? (
                       <textarea
                         value={metinOku(o.blok)}

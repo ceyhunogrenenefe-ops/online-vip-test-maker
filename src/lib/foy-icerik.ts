@@ -27,7 +27,17 @@ export type DonusumSecenek = {
   ilkSoruNo?: number;
   /** Formül çizici — testte yerine geçmesi için dışarıdan verilebilir */
   formulCiz?: (latex: string) => Promise<RenderedFormula>;
+  /** Yapıştırılan her sorunun üstüne yazılacak kazanım */
+  kazanim?: string;
 };
+
+export const KAZANIM_EKSIK =
+  "Soruyu eklemeden önce kazanımı seçin. Öğrenci, yapıştırılan sorunun üstünde hangi kazanım olduğunu görecek.";
+
+export function kazanimSatiri(b: DocBlock): string {
+  const k = b.kind === "question" || b.kind === "image" ? (b.kazanim || "").trim() : "";
+  return k ? `Kazanım: ${k}` : "";
+}
 
 async function varsayilanFormulCiz(latex: string): Promise<RenderedFormula> {
   // Tembel yükleme: MathJax yalnızca gerçekten formül varsa yüklenir,
@@ -55,7 +65,14 @@ export async function yapistirmayiBelgeye(
     } else if (b.kind === "table") {
       out.push({ kind: "table", rows: b.rows });
     } else if (b.kind === "question") {
-      out.push({ kind: "question", no: soruNo++, stem: b.stem, options: b.options });
+      const kazanim = (secenek.kazanim || "").trim();
+      out.push({
+        kind: "question",
+        no: soruNo++,
+        stem: b.stem,
+        options: b.options,
+        ...(kazanim ? { kazanim } : {}),
+      });
     } else if (b.kind === "formula") {
       try {
         const r = await formulCiz(b.latex);
