@@ -37,6 +37,47 @@ test("cozum kapaliyken blok listesi aynen kalir", () => {
   assert.equal(foyBaskiBloklari(bloklar, varsayilanTasarim()), bloklar);
 });
 
+test("soruya ozel satir sayisi genel ayarin onune gecer", () => {
+  const bloklar = [soru(1), soru(2)];
+  const tasarim = { ...varsayilanTasarim(), cozum: "kareli" as const, cozumSatir: 6 };
+  const baski = foyBaskiBloklari(bloklar, tasarim, [{ cozumSatir: 0 }, { cozumSatir: 2 }]);
+  assert.equal(baski.length, 3);
+  assert.equal(baski[0].kind, "question");
+  assert.equal(baski[1].kind, "question");
+  assert.equal(baski[2].kind, "answerLines");
+  if (baski[2].kind === "answerLines") {
+    assert.equal(baski[2].count, 2);
+    assert.equal(baski[2].style, "grid");
+  }
+});
+
+test("genis sorunun cozum satiri da sayfa genisliginde kalir", () => {
+  const genis: DocBlock = { ...soru(1), tamGenislik: true };
+  const tasarim = { ...varsayilanTasarim(), cozum: "cizgili" as const, cozumSatir: 3 };
+  const qr: DocBlock = { kind: "qr", dataUrl: "data:image/png;base64,abc", url: "https://ornek.test/v" };
+  const baski = foyBaskiBloklari([genis], tasarim, [{ qr }]);
+  assert.equal(baski[1].kind, "answerLines");
+  assert.equal(baski[1].tamGenislik, true);
+  assert.equal(baski[2].kind, "qr");
+  assert.equal(baski[2].tamGenislik, true);
+});
+
+test("gorsel sorunun altina da cozum boslugu gelir", () => {
+  const gorsel: DocBlock = { kind: "image", dataUrl: "x", aspect: 1, rol: "soru", no: 1 };
+  const tasarim = { ...varsayilanTasarim(), cozum: "cizgili" as const, cozumSatir: 3 };
+  const baski = foyBaskiBloklari([gorsel], tasarim);
+  assert.equal(baski.length, 2);
+  assert.equal(baski[1].kind, "answerLines");
+});
+
+test("gecerli video linki karekod blogu olur, gecersiz link basilmaz", () => {
+  const tasarim = varsayilanTasarim();
+  const qr: DocBlock = { kind: "qr", dataUrl: "data:image/png;base64,abc", url: "https://ornek.test/v" };
+  const baski = foyBaskiBloklari([soru(1), soru(2)], tasarim, [{ qr }, {}]);
+  assert.equal(baski[1].kind, "qr");
+  assert.equal(baski.length, 3);
+});
+
 test("bos cevap uydurulmaz", () => {
   const satirlar = cevapAnahtariSatirlari([
     { blok: soru(1), cevap: "12" },

@@ -11,7 +11,7 @@ import {
 import { blokCiz, blokYuksekligi, type DocBlock } from "./pdf-blocks";
 import { foyYerlesimPlani, planBlokSayisi } from "./foy-yerlesim";
 import { cachedBrandKit, loadBrandKit } from "./brand-kit";
-import { cevapAnahtariSatirlari, foyBaskiBloklari } from "./foy-baski";
+import { cevapAnahtariSatirlari, foyBaskiBloklari, type BaskiEk } from "./foy-baski";
 import { numaraliSoruMu } from "./foy-icerik";
 import type { FoyTasarim } from "./foy-kunye";
 import { drawPageWatermark } from "./pdf-watermark";
@@ -64,6 +64,9 @@ export type FoyCiktiSecenegi = {
   soruAraligiMm?: number;
   cozum?: FoyTasarim["cozum"];
   cozumSatir?: number;
+  akilliYerlesim?: boolean;
+  /** Bloklarla aynı sırada. Yalnızca soru bloklarının satırı ve karekodu okunur. */
+  baskiEk?: BaskiEk[];
   filigran?: boolean;
   /** true ise kurum logosu (yüklüyse) kullanılır; logo yoksa metin filigranı kalır. */
   filigranLogo?: boolean;
@@ -121,15 +124,20 @@ export async function foyPdfOlustur(
   const ustY = corporateHeaderHeight(settings);
   const altSinir = pageH - kenar - corporateFooterHeight();
   const aralik = Math.max(0, secenek.soruAraligiMm ?? 0);
-  const baski = foyBaskiBloklari(bloklar, {
-    cozum: secenek.cozum ?? "yok",
-    cozumSatir: secenek.cozumSatir ?? 4,
-  });
+  const baski = foyBaskiBloklari(
+    bloklar,
+    {
+      cozum: secenek.cozum ?? "yok",
+      cozumSatir: secenek.cozumSatir ?? 4,
+    },
+    secenek.baskiEk
+  );
 
+  const tamW = pageW - kenar * 2;
   const plan = foyYerlesimPlani(
     baski,
-    (b) => blokYuksekligi(doc, b, sutunW) + (numaraliSoruMu(b) ? aralik : 0),
-    { ustY, altSinir, maksSayfa: FOY_OLCU.maksSayfa, sutunSayisi }
+    (b, tam) => blokYuksekligi(doc, b, tam ? tamW : sutunW) + (numaraliSoruMu(b) ? aralik : 0),
+    { ustY, altSinir, maksSayfa: FOY_OLCU.maksSayfa, sutunSayisi, akilli: secenek.akilliYerlesim !== false }
   );
 
   const logo = secenek.filigranLogo ? cachedBrandKit().logoDataUrl : undefined;
@@ -143,13 +151,24 @@ export async function foyPdfOlustur(
       doc.setDrawColor(KURUMSAL.maviCizgi);
       doc.setLineWidth(0.3);
       const orta = kenar + sutunW + FOY_OLCU.sutunBoslugu / 2;
-      doc.line(orta, ustY, orta, altSinir);
+      const genisler = sayfa.sutunlar
+        .flat()
+        .filter((v) => v.tamGenislik)
+        .map((v) => ({ y: v.y, alt: v.y + (v.yukseklikMm ?? 0) }))
+        .sort((a, b) => a.y - b.y);
+      let cizgiY = ustY;
+      for (const g of genisler) {
+        if (g.y - cizgiY > 1) doc.line(orta, cizgiY, orta, g.y);
+        cizgiY = Math.max(cizgiY, g.alt);
+      }
+      if (altSinir - cizgiY > 1) doc.line(orta, cizgiY, orta, altSinir);
     }
 
     sayfa.sutunlar.forEach((sutun, ci) => {
       const x = kenar + ci * (sutunW + FOY_OLCU.sutunBoslugu);
       for (const yerlesen of sutun) {
-        blokCiz(doc, yerlesen.blok, x, yerlesen.y, sutunW);
+        const genis = yerlesen.tamGenislik === true;
+        blokCiz(doc, yerlesen.blok, genis ? kenar : x, yerlesen.y, genis ? tamW : sutunW);
       }
     });
   });

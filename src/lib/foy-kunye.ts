@@ -61,6 +61,8 @@ export type FoyTasarim = {
   soruAraligiMm: number;
   cozum: "yok" | "cizgili" | "kareli" | "bos";
   cozumSatir: number;
+  /** Sığmayan çözüm boşluğunu kısaltarak sütun dibindeki boş kağıdı doldurur. */
+  akilliYerlesim: boolean;
   filigran: boolean;
   /** Kurum logosu varsa filigran olarak kullanılır. Logo yoksa metin filigrana düşülür. */
   filigranLogo: boolean;
@@ -113,6 +115,7 @@ export function varsayilanTasarim(): FoyTasarim {
     soruAraligiMm: 0,
     cozum: "yok",
     cozumSatir: 4,
+    akilliYerlesim: true,
     filigran: true,
     filigranLogo: false,
   };

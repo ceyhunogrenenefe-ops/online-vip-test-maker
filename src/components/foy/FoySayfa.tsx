@@ -5,6 +5,8 @@ import { blokEtiketi } from "@/lib/foy-icerik";
 import { kapakSatirlari, type FoyKunye } from "@/lib/foy-kunye";
 import type { FoyOge } from "@/lib/foy-baski";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
+import { videoLinkiGecerli } from "@/lib/video-qr";
+import { FoyGorselSilgi } from "./FoyGorselSilgi";
 
 export function FoySayfa({
   kunye,
@@ -17,6 +19,7 @@ export function FoySayfa({
   onBlok,
   onCevap,
   onPuan,
+  onSoruAyar,
   onSayfaSonu,
   onSutunSonu,
   onBirak,
@@ -31,6 +34,7 @@ export function FoySayfa({
   onBlok: (i: number, blok: DocBlock) => void;
   onCevap: (i: number, cevap: string, cozum: string) => void;
   onPuan: (i: number, puan: number) => void;
+  onSoruAyar: (i: number, kismi: { cozumSatir?: number; videoUrl?: string }) => void;
   onSayfaSonu: () => void;
   onSutunSonu: () => void;
   onBirak: (kaynak: number, hedef: number) => void;
@@ -161,6 +165,13 @@ export function FoySayfa({
                             <option value="cozum">Çözüm</option>
                           </select>
                         </label>
+                        <FoyGorselSilgi
+                          dataUrl={o.blok.dataUrl}
+                          onUygula={(dataUrl) => {
+                            if (o.blok.kind !== "image") return;
+                            onBlok(i, { ...o.blok, dataUrl });
+                          }}
+                        />
                         <label className="block text-[11px] text-slate-500">
                           Görsel yüksekliği ({o.blok.maxHeightMm ?? 60} mm)
                           <input
@@ -176,6 +187,23 @@ export function FoySayfa({
                           />
                         </label>
                       </>
+                    ) : null}
+                    {o.blok.kind === "question" || o.blok.kind === "image" ? (
+                      <label className="flex items-start gap-2 text-[11px] text-slate-600">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={o.blok.tamGenislik === true}
+                          data-test="foy-tam-genislik"
+                          onChange={(e) => onBlok(i, { ...o.blok, tamGenislik: e.target.checked || undefined })}
+                        />
+                        <span>
+                          Sayfa genişliğinde
+                          <span className="mt-0.5 block text-slate-500">
+                            Bu parça tek başına sayfanın tamamını kullanır. Diğer sorular iki sütunda kalır.
+                          </span>
+                        </span>
+                      </label>
                     ) : null}
                     {o.blok.kind === "question" || (o.blok.kind === "image" && o.blok.rol === "soru") ? (
                       <div className="grid grid-cols-2 gap-1">
@@ -203,6 +231,39 @@ export function FoySayfa({
                               className="ml-1 w-16 rounded border px-1 py-0.5"
                             />
                           </label>
+                        ) : null}
+                        <label className="col-span-2 text-[11px] text-slate-500">
+                          Bu sorunun altındaki boşluk (satır)
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            placeholder="Sayfa tasarımı"
+                            value={o.cozumSatir ?? ""}
+                            data-test="foy-soru-bosluk"
+                            onChange={(e) => {
+                              const ham = e.target.value;
+                              onSoruAyar(i, {
+                                cozumSatir: ham === "" ? undefined : Math.min(20, Math.max(0, Math.round(Number(ham)) || 0)),
+                              });
+                            }}
+                            className="mt-0.5 w-full rounded border px-2 py-1 text-xs"
+                          />
+                        </label>
+                        <label className="col-span-2 text-[11px] text-slate-500">
+                          Video çözüm linki
+                          <input
+                            value={o.videoUrl || ""}
+                            placeholder="https://..."
+                            data-test="foy-video-link"
+                            onChange={(e) => onSoruAyar(i, { videoUrl: e.target.value })}
+                            className="mt-0.5 w-full rounded border px-2 py-1 text-xs"
+                          />
+                        </label>
+                        {o.videoUrl && !videoLinkiGecerli(o.videoUrl) ? (
+                          <p className="col-span-2 text-[11px] text-red-600">Link http veya https ile başlamalı.</p>
+                        ) : o.videoUrl ? (
+                          <p className="col-span-2 text-[11px] text-slate-500">Sayfada karekod olarak basılır.</p>
                         ) : null}
                       </div>
                     ) : null}
