@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
-import { blokEtiketi, kazanimSatiri } from "@/lib/foy-icerik";
+import { blokEtiketi, kazanimSatiri, kazanimYaz } from "@/lib/foy-icerik";
 import { kapakSatirlari, type FoyKunye } from "@/lib/foy-kunye";
 import type { FoyOge } from "@/lib/foy-baski";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
@@ -160,10 +160,7 @@ export function FoySayfa({
                           value={o.blok.kazanim || ""}
                           rows={2}
                           data-test="foy-soru-kazanim-duzenle"
-                          onChange={(e) => {
-                            const yazilan = e.target.value;
-                            onBlok(i, { ...o.blok, kazanim: yazilan.trim() ? yazilan : undefined });
-                          }}
+                          onChange={(e) => onBlok(i, kazanimYaz(o.blok, e.target.value))}
                           className="mt-0.5 w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-normal text-slate-800"
                         />
                       </label>
