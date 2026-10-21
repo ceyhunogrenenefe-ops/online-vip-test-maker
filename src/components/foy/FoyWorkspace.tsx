@@ -83,6 +83,7 @@ export function FoyWorkspace() {
   const [belgeler, setBelgeler] = useState<FoyBelgeOzet[]>([]);
   const [kalite, setKalite] = useState<{ surum: "ogrenci" | "ogretmen"; notlar: string[] } | null>(null);
   const [surumListe, setSurumListe] = useState<Surum[]>([]);
+  const [acikBelge, setAcikBelge] = useState("");
 
   const yuklendi = useRef(false);
   const [hazir, setHazir] = useState(false);
@@ -90,6 +91,11 @@ export function FoyWorkspace() {
   const gecmis = useRef<FoyOge[][]>([]);
   const ileri = useRef<FoyOge[][]>([]);
   const belgeId = useRef("");
+  const bosYeni = useRef(false);
+  const belgeAta = (id: string) => {
+    belgeId.current = id;
+    setAcikBelge(id);
+  };
   const surumler = useRef<Surum[]>([]);
   const pano = useRef<FoyOge | null>(null);
   const kirpRef = useRef<FoyKirpHandle>(null);
@@ -117,7 +123,7 @@ export function FoyWorkspace() {
     );
     ogelerRef.current = liste;
     setOgeler(liste);
-    belgeId.current = t.belgeId || yeniId();
+    belgeAta(t.belgeId || yeniId());
     surumler.current = (t.surumler as Surum[] | undefined) ?? [];
     setSurumListe(surumler.current);
   };
@@ -129,10 +135,10 @@ export function FoyWorkspace() {
         const t = await getFoyTaslak();
         if (iptal) return;
         if (t) uygulaTaslak(t);
-        else belgeId.current = yeniId();
+        else belgeAta(yeniId());
         yenileListe();
       } catch {
-        belgeId.current = belgeId.current || yeniId();
+        if (!belgeId.current) belgeAta(yeniId());
       } finally {
         if (!iptal) {
           yuklendi.current = true;
@@ -172,9 +178,21 @@ export function FoyWorkspace() {
   }, [kunye, tasarim]);
 
   const kaydet = useCallback(
-    async (manuel: boolean) => {
-      if (!yuklendi.current) return;
-      if (!belgeId.current) belgeId.current = yeniId();
+    async (manuel: boolean): Promise<boolean> => {
+      if (!yuklendi.current) return false;
+      if (!belgeId.current) belgeAta(yeniId());
+      const bosTaslak =
+        bosYeni.current && !manuel && ogelerRef.current.length === 0 && !kunye.dokumanAdi.trim();
+      if (bosTaslak) {
+        try {
+          await saveFoyTaslak(taslak());
+          return true;
+        } catch {
+          setKayit("hata");
+          return false;
+        }
+      }
+      bosYeni.current = false;
       setKayit("kaydediliyor");
       try {
         if (manuel) {
@@ -196,8 +214,10 @@ export function FoyWorkspace() {
         });
         setKayit("kaydedildi");
         yenileListe();
+        return true;
       } catch {
         setKayit("hata");
+        return false;
       }
     },
     [kunye, taslak]
@@ -501,11 +521,38 @@ export function FoyWorkspace() {
     );
   };
 
+  const yeniFoy = async () => {
+    const dolu = ogelerRef.current.length > 0 || kunye.dokumanAdi.trim().length > 0;
+    if (dolu) {
+      const oldu = await kaydet(true);
+      if (!oldu) return;
+    }
+    belgeAta(yeniId());
+    bosYeni.current = true;
+    gecmis.current = [];
+    ileri.current = [];
+    surumler.current = [];
+    setSurumListe([]);
+    setSecili(-1);
+    setKazanim("");
+    setHata(null);
+    setUyarilar([]);
+    setFormulAcik(false);
+    setKalite(null);
+    setArac("kunye");
+    setMobil("sayfa");
+    ogelerRef.current = [];
+    setOgeler([]);
+    setKunye({ ...kunye, dokumanAdi: "", konu: "" });
+    setAdim((a) => a + 1);
+  };
+
   const belgeAc = async (id: string) => {
     const t = await foyBelgeOku(id);
     if (!t) return;
     gecmis.current = [];
     ileri.current = [];
+    bosYeni.current = false;
     uygulaTaslak(t);
   };
 
@@ -543,11 +590,20 @@ export function FoyWorkspace() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b bg-white px-3 py-2 text-xs">
+        <button
+          type="button"
+          onClick={() => void yeniFoy()}
+          className="flex items-center gap-1 rounded bg-[#173b70] px-2 py-1 font-semibold text-white"
+          data-test="foy-yeni"
+        >
+          <Plus size={13} /> Yeni föy
+        </button>
         <input
           value={kunye.dokumanAdi}
           onChange={(e) => setKunye({ ...kunye, dokumanAdi: e.target.value })}
           placeholder="Doküman adı"
           className="w-48 rounded border px-2 py-1"
+          data-test="foy-dokuman-adi"
         />
         <span className="text-slate-500">
           {kayit === "kaydediliyor" ? "Kaydediliyor…" : kayit === "hata" ? "Kayıt hatası" : "Kaydedildi"}
@@ -587,12 +643,13 @@ export function FoyWorkspace() {
         </select>
         <select
           className="max-w-[180px] rounded border px-1 py-1"
-          value={belgeId.current}
+          value={acikBelge}
           onChange={(e) => void belgeAc(e.target.value)}
+          data-test="foy-belge-listesi"
         >
-          <option value={belgeId.current}>{kunye.dokumanAdi || "Bu föy"}</option>
+          <option value={acikBelge}>{kunye.dokumanAdi || "Bu föy"}</option>
           {belgeler
-            .filter((b) => b.id !== belgeId.current && !b.arsiv)
+            .filter((b) => b.id !== acikBelge && !b.arsiv)
             .map((b) => (
               <option key={b.id} value={b.id}>
                 {b.ad}
@@ -603,7 +660,8 @@ export function FoyWorkspace() {
           type="button"
           className="rounded border px-2 py-1"
           onClick={() => {
-            belgeId.current = yeniId();
+            belgeAta(yeniId());
+            bosYeni.current = false;
             setKunye({ ...kunye, dokumanAdi: `Kopya — ${kunye.dokumanAdi || "föy"}` });
             void kaydet(true);
           }}
@@ -623,7 +681,8 @@ export function FoyWorkspace() {
                 guncelleme: Date.now(),
                 arsiv: true,
               });
-              belgeId.current = yeniId();
+              belgeAta(yeniId());
+              bosYeni.current = true;
               setKunye(varsayilanKunye());
               setTasarim(varsayilanTasarim());
               degistir([]);
