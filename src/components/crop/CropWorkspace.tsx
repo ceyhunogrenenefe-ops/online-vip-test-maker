@@ -16,6 +16,11 @@ import {
 import { getCroppedImage, readFileAsDataUrl } from "@/lib/crop";
 import type { PixelCrop } from "@/lib/crop";
 import { defaultCenterCrop } from "@/lib/crop-math";
+import { secimiGenislet } from "@/lib/kirp-secim";
+import { akisiKapat, bekleyenAkisiAl, ekranPaylasiminiBeklet } from "@/lib/ekran-yakala";
+
+/** Geliştirme modunda etki iki kez kurulur; eski kurulum akışı kesmesin. */
+let ekranKurulum = 0;
 import {
   DEFAULT_ENHANCE,
   type EnhanceSettings,
@@ -35,6 +40,7 @@ import { saveQuestion } from "@/lib/storage";
 import { useAppStore } from "@/store/useAppStore";
 import type { AnswerOption, Question } from "@/types";
 import { ImageCropCanvas } from "./ImageCropCanvas";
+import { EkranSeridi } from "./EkranSeridi";
 import { syncCropToDetected } from "./ResizableCropBox";
 import { PdfSourceBar, type PdfSession } from "./PdfSourceBar";
 import { QuestionEditModal } from "./QuestionEditModal";
@@ -59,6 +65,11 @@ export function CropWorkspace() {
   const pdfFilesRef = useRef<Map<string, File>>(new Map());
 
   const [pdfSessions, setPdfSessions] = useState<PdfSession[]>([]);
+  const [ekranAkisi, setEkranAkisi] = useState<MediaStream | null>(null);
+  const [ekranAdi, setEkranAdi] = useState<string | null>(null);
+  const ekranRef = useRef<MediaStream | null>(null);
+  const kaynakNesil = useRef(0);
+  ekranRef.current = ekranAkisi;
   const [activePdfId, setActivePdfId] = useState<string | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -102,6 +113,7 @@ export function CropWorkspace() {
       if (activeFile && activeSession) {
         return q.pdfPage === pdfPage && q.pdfSourceName === activeSession.name;
       }
+      if (ekranAdi) return !q.pdfPage && q.pdfSourceName === ekranAdi;
       return !q.pdfPage && !q.pdfSourceName;
     })
     .map((q) => ({
@@ -160,15 +172,18 @@ export function CropWorkspace() {
 
   const loadPdfPage = useCallback(
     async (file: File, page: number) => {
+      const nesil = ++kaynakNesil.current;
+      setEkranAdi(null);
       setLoadingPage(true);
       try {
         const dataUrl = await renderPdfPageToDataUrl(file, page, pdfScale);
+        if (kaynakNesil.current !== nesil) return;
         setImageSrc(dataUrl);
         setDetected([]);
         setSelectedDetectId(null);
         setActiveCrop(null);
       } finally {
-        setLoadingPage(false);
+        if (kaynakNesil.current === nesil) setLoadingPage(false);
       }
     },
     [pdfScale]
@@ -177,6 +192,40 @@ export function CropWorkspace() {
   useEffect(() => {
     if (activeFile && pdfPage >= 1) loadPdfPage(activeFile, pdfPage);
   }, [activeFile, pdfPage, pdfScale, loadPdfPage]);
+
+  useEffect(() => {
+    const ben = ++ekranKurulum;
+    const hazir = bekleyenAkisiAl();
+    if (hazir) setEkranAkisi(hazir);
+    return () => {
+      const akis = ekranRef.current ?? hazir;
+      if (akis) ekranPaylasiminiBeklet(akis);
+      queueMicrotask(() => {
+        if (ekranKurulum !== ben) return;
+        const artik = bekleyenAkisiAl();
+        if (artik) akisiKapat(artik);
+      });
+    };
+  }, []);
+
+  const goruntuAc = (dataUrl: string) => {
+    kaynakNesil.current += 1;
+    setLoadingPage(false);
+    setEkranAdi("Açık sayfa");
+    setActivePdfId(null);
+    setImageSrc(dataUrl);
+    setDetected([]);
+    setSelectedDetectId(null);
+    setActiveCrop(null);
+    setCropMode("manual");
+  };
+
+  const secimiOynat = (yon: 1 | -1) => {
+    if (!activeCrop || imageSize.width < 1 || imageSize.height < 1) return;
+    const adim =
+      Math.max(16, Math.round(Math.min(imageSize.width, imageSize.height) * 0.012)) * yon;
+    setActiveCrop(secimiGenislet(activeCrop, adim, imageSize.width, imageSize.height));
+  };
 
   const initManualCrop = useCallback((w: number, h: number) => {
     setActiveCrop(defaultCenterCrop(w, h));
@@ -203,6 +252,8 @@ export function CropWorkspace() {
   );
 
   const handleImageFile = async (file: File) => {
+    kaynakNesil.current += 1;
+    setEkranAdi(null);
     setActivePdfId(null);
     const dataUrl = await readFileAsDataUrl(file);
     setImageSrc(dataUrl);
@@ -289,7 +340,7 @@ export function CropWorkspace() {
       imageDataUrl: result.imageDataUrl,
       source: "crop",
       createdAt: Date.now(),
-      pdfSourceName: activeSession?.name,
+      pdfSourceName: activeSession?.name ?? ekranAdi ?? undefined,
       pdfPage: activeFile ? pdfPage : undefined,
       answerKey: result.answerKey,
       overlayText: result.overlayText,
@@ -341,7 +392,7 @@ export function CropWorkspace() {
           imageDataUrl: dataUrl,
           source: "crop",
           createdAt: Date.now(),
-          pdfSourceName: activeSession?.name,
+          pdfSourceName: activeSession?.name ?? ekranAdi ?? undefined,
           pdfPage: activeFile ? pdfPage : undefined,
           sourceCrop: { ...region.crop },
           sourceImageWidth: imageSize.width,
@@ -485,8 +536,10 @@ export function CropWorkspace() {
   );
 
   const resetAll = () => {
+    kaynakNesil.current += 1;
     pdfFilesRef.current.clear();
     setPdfSessions([]);
+    setEkranAdi(null);
     setActivePdfId(null);
     setImageSrc(null);
     setDetected([]);
@@ -509,9 +562,12 @@ export function CropWorkspace() {
             PDF seçin, ardarda soru kırpın
           </p>
           <p className="mb-6 max-w-md text-center text-sm text-slate-500">
-            Birden fazla PDF ekleyebilir, üstten geçiş yapabilirsiniz. Sorular
-            altta küçük önizleme olarak birikir.
+            PDF yükleyebilir veya Z-kitap gibi açık bir sayfayı, sekmeyi ya da dosya
+            penceresini burada görüp kırpabilirsiniz.
           </p>
+          <div className="mb-4 w-full max-w-xl">
+            <EkranSeridi akis={ekranAkisi} onAkis={setEkranAkisi} onKare={goruntuAc} />
+          </div>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -581,7 +637,7 @@ export function CropWorkspace() {
             <Settings size={20} />
           </button>
           <span className="flex-1 truncate text-sm font-medium text-slate-700">
-            Görsel kırpma
+            {ekranAdi ?? "Görsel kırpma"}
           </span>
           <button
             type="button"
@@ -592,6 +648,10 @@ export function CropWorkspace() {
           </button>
         </div>
       )}
+
+      <div className="border-b border-slate-200 bg-white px-3 py-2">
+        <EkranSeridi akis={ekranAkisi} onAkis={setEkranAkisi} onKare={goruntuAc} />
+      </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {loadingPage && (
@@ -661,8 +721,29 @@ export function CropWorkspace() {
             </button>
           </>
         ) : (
-          <span className="text-sm text-slate-400">Tek görsel</span>
+          <span className="text-sm text-slate-400">{ekranAdi ?? "Tek görsel"}</span>
         )}
+
+        {activeCrop ? (
+          <>
+            <button
+              type="button"
+              onClick={() => secimiOynat(1)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"
+              data-test="kirp-genislet"
+            >
+              Genişlet
+            </button>
+            <button
+              type="button"
+              onClick={() => secimiOynat(-1)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"
+              data-test="kirp-daralt"
+            >
+              Daralt
+            </button>
+          </>
+        ) : null}
 
         <span className="mx-auto text-sm font-medium text-slate-700">
           Toplam Soru: {panelQuestions.length}

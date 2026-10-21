@@ -9,6 +9,7 @@ import {
   GripVertical,
   X,
   ImagePlus,
+  Monitor,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useAppStore } from "@/store/useAppStore";
@@ -16,6 +17,7 @@ import { saveQuestion } from "@/lib/storage";
 import { ANSWER_OPTIONS } from "@/types";
 import type { AnswerOption } from "@/types";
 import { readFileAsDataUrl } from "@/lib/crop";
+import { ekranHatasi, ekranPaylasiminiAc, ekranPaylasiminiBeklet } from "@/lib/ekran-yakala";
 import type { Question } from "@/types";
 import { QuestionBankModal } from "./QuestionBankModal";
 
@@ -33,6 +35,17 @@ export function QuestionWorkspace() {
   const smartPlacement = useAppStore((s) => s.paperSettings.smartPlacement);
   const setActiveView = useAppStore((s) => s.setActiveView);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [ekranHata, setEkranHata] = useState<string | null>(null);
+
+  const acikSayfadanAl = () => {
+    setEkranHata(null);
+    void ekranPaylasiminiAc()
+      .then((akis) => {
+        ekranPaylasiminiBeklet(akis);
+        setActiveView("crop");
+      })
+      .catch((e) => setEkranHata(ekranHatasi(e)));
+  };
   const canReorder = !smartPlacement;
 
   const persistOrder = useCallback(
@@ -128,6 +141,15 @@ export function QuestionWorkspace() {
               </button>
               <button
                 type="button"
+                onClick={acikSayfadanAl}
+                className="flex flex-col items-center gap-2 text-sm text-slate-600 hover:text-dershanem-blue"
+                data-test="anasayfa-ekran"
+              >
+                <Monitor size={32} />
+                Açık sayfadan al
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveView("editor")}
                 className="flex flex-col items-center gap-2 text-sm text-slate-600 hover:text-dershanem-blue"
               >
@@ -143,6 +165,7 @@ export function QuestionWorkspace() {
                 Soru Bankası
               </button>
             </div>
+            {ekranHata ? <p className="mt-4 max-w-md text-center text-sm text-amber-800">{ekranHata}</p> : null}
             <input
               ref={fileRef}
               type="file"
@@ -177,6 +200,13 @@ export function QuestionWorkspace() {
                 </button>
                 <button
                   type="button"
+                  onClick={acikSayfadanAl}
+                  className="rounded border px-3 py-1.5 text-sm hover:bg-white"
+                >
+                  Açık sayfadan al
+                </button>
+                <button
+                  type="button"
                   onClick={() => setShowBank(true)}
                   className="rounded border px-3 py-1.5 text-sm hover:bg-white"
                 >
@@ -184,6 +214,7 @@ export function QuestionWorkspace() {
                 </button>
               </div>
             </div>
+            {ekranHata ? <p className="text-sm text-amber-800">{ekranHata}</p> : null}
             <div className="grid flex-1 grid-cols-1 gap-4 overflow-y-auto sm:grid-cols-2">
               {draftQuestions.map((q, i) => (
                 <div

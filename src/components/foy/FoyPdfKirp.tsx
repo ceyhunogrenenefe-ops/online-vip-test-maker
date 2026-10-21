@@ -2,6 +2,8 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { EkranSeridi } from "@/components/crop/EkranSeridi";
+import { akisiKapat } from "@/lib/ekran-yakala";
 import { getCroppedImage } from "@/lib/crop";
 import type { PixelCrop } from "@/lib/crop";
 import { secimiGenislet, secimiUygula, type SecimKenari } from "@/lib/kirp-secim";
@@ -54,6 +56,8 @@ export const FoyPdfKirp = forwardRef<
   const [olcek, setOlcek] = useState(3);
   const [yakin, setYakin] = useState(100);
   const [sayfaUrl, setSayfaUrl] = useState<string | null>(null);
+  const [ekranUrl, setEkranUrl] = useState<string | null>(null);
+  const [ekranAkisi, setEkranAkisi] = useState<MediaStream | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [uyari, setUyari] = useState<string | null>(null);
@@ -66,12 +70,19 @@ export const FoyPdfKirp = forwardRef<
   const [ciziyor, setCiziyor] = useState(false);
   const [sonEklenen, setSonEklenen] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const ekranModu = useRef(false);
+  const akisRef = useRef<MediaStream | null>(null);
+  akisRef.current = ekranAkisi;
   const katmanRef = useRef<HTMLDivElement>(null);
   const baslangic = useRef<{ x: number; y: number } | null>(null);
   const ayar = useRef<{ kenar: SecimKenari; bas: PixelCrop; x: number; y: number } | null>(null);
 
   useImperativeHandle(ref, () => ({
     odak(alan) {
+      if (alan.pdfAd === "Açık sayfa") {
+        setUyari("Bu kırpma açık bir sayfadan alındı. Görsel föyde duruyor; aynı kareyi yeniden almak için paylaşımı açın.");
+        return;
+      }
       if (!dosya || dosya.name !== alan.pdfAd) {
         setUyari(`Bu kırpma "${alan.pdfAd}" dosyasından. Aynı PDF'yi yeniden seçin; görsel föyde duruyor.`);
         return;
@@ -83,10 +94,14 @@ export const FoyPdfKirp = forwardRef<
   }));
 
   useEffect(() => {
+    return () => akisiKapat(akisRef.current);
+  }, []);
+
+  useEffect(() => {
     if (!dosya) {
       setSayfaSayisi(0);
-      setSayfaUrl(null);
       setKucuk({});
+      if (!ekranModu.current) setSayfaUrl(null);
       return;
     }
     let iptal = false;
@@ -220,9 +235,25 @@ export const FoyPdfKirp = forwardRef<
     setAktif(secimiGenislet(aktif, adim, olcu.w, olcu.h));
   };
 
+  const kareAl = (url: string) => {
+    ekranModu.current = true;
+    setEkranUrl(url);
+    setAktif(null);
+    setHata(null);
+    setYukleniyor(false);
+  };
+
+  const pdfyeDon = () => {
+    ekranModu.current = false;
+    setEkranUrl(null);
+    setAktif(null);
+  };
+
   const dosyaSec = (f: File | null) => {
     setHata(null);
     setUyari(null);
+    ekranModu.current = false;
+    setEkranUrl(null);
     if (!f) return;
     if (!isPdfFile(f)) {
       setHata("Yalnızca PDF seçin.");
@@ -240,11 +271,13 @@ export const FoyPdfKirp = forwardRef<
   const gelistir = fotokopi ? { ...DEFAULT_ENHANCE, photocopy: true, contrast: 1.35 } : DEFAULT_ENHANCE;
 
   const parcaUret = async (rol: GorselRol): Promise<KirpilmisParca | null> => {
-    if (!dosya || !sayfaUrl || !aktif) return null;
+    const gorsel = ekranUrl || sayfaUrl;
+    if ((!dosya && !ekranUrl) || !gorsel || !aktif) return null;
     setHata(null);
+    const acikSayfa = !!ekranUrl;
     const kaynak: KirpmaAlani = {
-      pdfAd: dosya.name,
-      sayfa,
+      pdfAd: acikSayfa ? "Açık sayfa" : dosya!.name,
+      sayfa: acikSayfa ? 1 : sayfa,
       x: aktif.x,
       y: aktif.y,
       width: aktif.width,
@@ -254,7 +287,7 @@ export const FoyPdfKirp = forwardRef<
     if (cakisan) {
       setUyari("Bu alan daha önce seçilmişe çok benziyor. Yine de eklendi.");
     }
-    const dataUrl = await getCroppedImage(sayfaUrl, aktif, gelistir);
+    const dataUrl = await getCroppedImage(gorsel, aktif, gelistir);
     const img = await olc(dataUrl);
     return { dataUrl, aspect: img.width / img.height, kaynak, rol };
   };
@@ -310,9 +343,10 @@ export const FoyPdfKirp = forwardRef<
   return (
     <div className="space-y-2 text-xs">
       <p className="text-[11px] text-slate-500">
-        Sorunun çevresini sürükleyerek seçin. Seçtikten sonra kenar tutamaçlarından ya da Genişlet / Daralt ile ayarlayın.
-        PDF bu oturumda durur.
+        PDF yükleyin ya da Z-kitap gibi açık bir sayfayı burada görüp kırpın. Seçtikten sonra kenar
+        tutamaçlarından ya da Genişlet / Daralt ile ayarlayın.
       </p>
+      <EkranSeridi akis={ekranAkisi} onAkis={setEkranAkisi} onKare={kareAl} />
       <input
         type="file"
         accept="application/pdf,.pdf"
@@ -327,38 +361,47 @@ export const FoyPdfKirp = forwardRef<
       {hata ? <p className="rounded bg-red-50 p-2 text-red-700">{hata}</p> : null}
       {uyari ? <p className="rounded bg-amber-50 p-2 text-amber-900">{uyari}</p> : null}
 
-      {sayfaSayisi > 0 ? (
+      {sayfaSayisi > 0 || ekranUrl ? (
         <>
+          {ekranUrl && dosya ? (
+            <button type="button" className="rounded border px-2 py-1" onClick={pdfyeDon}>
+              PDF sayfasına dön
+            </button>
+          ) : null}
+          {!ekranUrl && sayfaSayisi > 0 ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <button type="button" className="rounded border px-2 py-1" onClick={() => setSayfa((s) => Math.max(1, s - 1))}>
+                Önceki
+              </button>
+              <label>
+                Sayfa
+                <input
+                  type="number"
+                  min={1}
+                  max={sayfaSayisi}
+                  value={sayfa}
+                  onChange={(e) => setSayfa(Math.min(sayfaSayisi, Math.max(1, Number(e.target.value) || 1)))}
+                  className="ml-1 w-14 rounded border px-1 py-0.5"
+                />
+              </label>
+              <button
+                type="button"
+                className="rounded border px-2 py-1"
+                onClick={() => setSayfa((s) => Math.min(sayfaSayisi, s + 1))}
+              >
+                Sonraki
+              </button>
+              <label>
+                Netlik
+                <select value={olcek} onChange={(e) => setOlcek(Number(e.target.value))} className="ml-1 rounded border px-1 py-0.5">
+                  <option value={2}>Standart</option>
+                  <option value={3}>Yüksek</option>
+                  <option value={4}>En yüksek</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-1">
-            <button type="button" className="rounded border px-2 py-1" onClick={() => setSayfa((s) => Math.max(1, s - 1))}>
-              Önceki
-            </button>
-            <label>
-              Sayfa
-              <input
-                type="number"
-                min={1}
-                max={sayfaSayisi}
-                value={sayfa}
-                onChange={(e) => setSayfa(Math.min(sayfaSayisi, Math.max(1, Number(e.target.value) || 1)))}
-                className="ml-1 w-14 rounded border px-1 py-0.5"
-              />
-            </label>
-            <button
-              type="button"
-              className="rounded border px-2 py-1"
-              onClick={() => setSayfa((s) => Math.min(sayfaSayisi, s + 1))}
-            >
-              Sonraki
-            </button>
-            <label>
-              Netlik
-              <select value={olcek} onChange={(e) => setOlcek(Number(e.target.value))} className="ml-1 rounded border px-1 py-0.5">
-                <option value={2}>Standart</option>
-                <option value={3}>Yüksek</option>
-                <option value={4}>En yüksek</option>
-              </select>
-            </label>
             <button type="button" className="rounded border px-2 py-1" onClick={() => setYakin((z) => Math.min(220, z + 20))}>
               Yakınlaş
             </button>
@@ -370,18 +413,20 @@ export const FoyPdfKirp = forwardRef<
             <input type="checkbox" checked={fotokopi} onChange={(e) => setFotokopi(e.target.checked)} />
             Siyah-beyaz fotokopi için zemin temizliği
           </label>
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {Array.from({ length: sayfaSayisi }, (_, i) => i + 1).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setSayfa(p)}
-                className={`h-16 w-12 shrink-0 overflow-hidden rounded border ${p === sayfa ? "border-[#173b70]" : "border-slate-200"}`}
-              >
-                {kucuk[p] ? <img src={kucuk[p]} alt="" className="h-full w-full object-cover" /> : <span>{p}</span>}
-              </button>
-            ))}
-          </div>
+          {!ekranUrl && sayfaSayisi > 0 ? (
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {Array.from({ length: sayfaSayisi }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setSayfa(p)}
+                  className={`h-16 w-12 shrink-0 overflow-hidden rounded border ${p === sayfa ? "border-[#173b70]" : "border-slate-200"}`}
+                >
+                  {kucuk[p] ? <img src={kucuk[p]} alt="" className="h-full w-full object-cover" /> : <span>{p}</span>}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {sonEklenen ? <p className="rounded bg-emerald-50 p-2 text-emerald-900">{sonEklenen}</p> : null}
           {aktif && !ciziyor ? (
             <div className="flex flex-wrap items-center gap-1 rounded border border-red-200 bg-red-50 p-1">
@@ -422,13 +467,13 @@ export const FoyPdfKirp = forwardRef<
             </div>
           ) : null}
           <div className="max-h-[68vh] overflow-auto rounded border bg-slate-100">
-            {yukleniyor || !sayfaUrl ? (
+            {(!ekranUrl && yukleniyor) || !(ekranUrl || sayfaUrl) ? (
               <p className="flex items-center gap-1 p-4 text-slate-500">
                 <Loader2 size={14} className="animate-spin" /> Sayfa hazırlanıyor
               </p>
             ) : (
               <div className="relative inline-block" style={{ width: `${yakin}%` }}>
-                <img ref={imgRef} src={sayfaUrl} alt="" className="block w-full select-none" draggable={false} />
+                <img ref={imgRef} src={ekranUrl || sayfaUrl || ""} alt="" className="block w-full select-none" draggable={false} />
                 <div
                   ref={katmanRef}
                   className="absolute inset-0 cursor-crosshair touch-none"
