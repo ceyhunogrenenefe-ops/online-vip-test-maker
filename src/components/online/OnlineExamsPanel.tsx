@@ -125,7 +125,7 @@ export function OnlineExamsPanel() {
   const submissions = viewResultsId ? loadSubmissions(viewResultsId) : [];
 
   return (
-    <div className="m-4 flex flex-1 flex-col rounded-xl bg-white shadow">
+    <div className="m-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
         <div>
           <h2 className="text-lg font-bold text-dershanem-navy">

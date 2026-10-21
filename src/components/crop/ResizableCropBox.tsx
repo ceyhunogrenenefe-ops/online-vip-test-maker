@@ -37,7 +37,7 @@ const accentStyles = {
 };
 
 const handleClass =
-  "absolute z-10 h-2.5 w-2.5 border border-slate-500 bg-slate-300 shadow-sm";
+  "absolute z-10 h-6 w-6 touch-none border border-slate-500 bg-slate-300 shadow-sm";
 
 export function ResizableCropBox({
   crop,
@@ -113,7 +113,7 @@ export function ResizableCropBox({
 
   return (
     <div
-      className={`absolute ${accentStyles[accent]}`}
+      className={`absolute touch-none ${accentStyles[accent]}`}
       style={{ left, top, width, height, zIndex }}
     >
       <div

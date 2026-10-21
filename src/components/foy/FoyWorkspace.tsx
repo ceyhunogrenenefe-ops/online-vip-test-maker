@@ -58,6 +58,18 @@ const ARACLAR: [Arac, string][] = [
 
 type Surum = { guncelleme: number; ogeler: FoyOge[]; ad: string };
 
+function useDarEkran() {
+  const [dar, setDar] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const yaz = () => setDar(mq.matches);
+    yaz();
+    mq.addEventListener("change", yaz);
+    return () => mq.removeEventListener("change", yaz);
+  }, []);
+  return dar;
+}
+
 export function FoyWorkspace() {
   const [kunye, setKunye] = useState<FoyKunye>(() => varsayilanKunye());
   const [kazanim, setKazanim] = useState("");
@@ -68,6 +80,7 @@ export function FoyWorkspace() {
   const [mobil, setMobil] = useState<"arac" | "sayfa" | "onizleme">("sayfa");
   const [solAcik, setSolAcik] = useState(true);
   const [sagAcik, setSagAcik] = useState(true);
+  const dar = useDarEkran();
   const [solW, setSolW] = useState(340);
   const [sagW, setSagW] = useState(380);
   const [uyarilar, setUyarilar] = useState<string[]>([]);
@@ -589,7 +602,7 @@ export function FoyWorkspace() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b bg-white px-3 py-2 text-xs">
+      <div className="flex items-center gap-2 overflow-x-auto border-b bg-white px-3 py-2 text-xs [&>*]:shrink-0">
         <button
           type="button"
           onClick={() => void yeniFoy()}
@@ -708,10 +721,10 @@ export function FoyWorkspace() {
         ))}
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 w-full flex-1">
         <section
-          style={{ width: solW }}
-          className={`shrink-0 overflow-y-auto border-r bg-slate-50 p-2 ${mobil !== "arac" ? "max-lg:hidden" : ""} ${solAcik ? "" : "lg:hidden"}`}
+          style={dar ? undefined : { width: solW }}
+          className={`min-h-0 overflow-y-auto border-r bg-slate-50 p-2 ${dar ? "w-full flex-1" : "shrink-0"} ${mobil !== "arac" ? "max-lg:hidden" : ""} ${solAcik ? "" : "lg:hidden"}`}
         >
           <div className="mb-2 flex flex-wrap gap-1">
             {ARACLAR.map(([id, ad]) => (
@@ -885,8 +898,8 @@ export function FoyWorkspace() {
         </button>
 
         <section
-          style={{ width: sagW }}
-          className={`shrink-0 overflow-hidden border-l bg-white p-2 ${mobil !== "onizleme" ? "max-lg:hidden" : ""} ${sagAcik ? "" : "lg:hidden"}`}
+          style={dar ? undefined : { width: sagW }}
+          className={`min-h-0 overflow-hidden border-l bg-white p-2 ${dar ? "w-full flex-1" : "shrink-0"} ${mobil !== "onizleme" ? "max-lg:hidden" : ""} ${sagAcik ? "" : "lg:hidden"}`}
         >
           <FoyOnizleme
             url={pdfUrl}
@@ -905,7 +918,7 @@ export function FoyWorkspace() {
         aria-modal={pdfAcik}
         aria-label="PDF'den soru al"
       >
-        <div className="flex h-[min(94vh,960px)] w-[min(1120px,96vw)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+        <div className="flex h-[min(94dvh,960px)] w-[min(1120px,96vw)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b px-4 py-2">
             <h2 className="text-sm font-bold text-[#173b70]">{"PDF'den soru al"}</h2>
             <button

@@ -1,6 +1,7 @@
 "use client";
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { guvenliPdfOlcegi } from "./pdf-olcek";
 
 let pdfjsModule: typeof import("pdfjs-dist") | null = null;
 
@@ -14,6 +15,7 @@ async function getPdfJs() {
 }
 
 const docCache = new Map<string, PDFDocumentProxy>();
+const urlCache = new Map<string, string>();
 
 function cacheKey(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`;
@@ -25,10 +27,26 @@ export async function openPdfDocument(file: File): Promise<PDFDocumentProxy> {
   if (cached) return cached;
 
   const pdfjs = await getPdfJs();
-  const data = new Uint8Array(await file.arrayBuffer());
-  const doc = await pdfjs.getDocument({ data }).promise;
-  docCache.set(key, doc);
-  return doc;
+  const url = URL.createObjectURL(file);
+  try {
+    const doc = await pdfjs.getDocument({ url }).promise;
+    if (docCache.size >= 2) {
+      const ilk = docCache.keys().next().value as string | undefined;
+      if (ilk) {
+        docCache.get(ilk)?.destroy();
+        const eski = urlCache.get(ilk);
+        if (eski) URL.revokeObjectURL(eski);
+        docCache.delete(ilk);
+        urlCache.delete(ilk);
+      }
+    }
+    urlCache.set(key, url);
+    docCache.set(key, doc);
+    return doc;
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
+  }
 }
 
 export async function getPdfPageCount(file: File): Promise<number> {
@@ -45,7 +63,10 @@ export async function renderPdfPageToDataUrl(
   const pdfjs = await getPdfJs();
   const doc = await openPdfDocument(file);
   const page = await doc.getPage(pageNumber);
-  const viewport = page.getViewport({ scale });
+  const taban = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({
+    scale: guvenliPdfOlcegi(scale, taban.width, taban.height),
+  });
 
   const canvas = document.createElement("canvas");
   canvas.width = viewport.width;
