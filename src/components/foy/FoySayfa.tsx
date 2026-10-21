@@ -158,6 +158,7 @@ export function FoySayfa({
                       <FoyKazanimSec
                         sinif={kunye.sinif}
                         brans={kunye.brans}
+                        yazili={kunye.yazili}
                         value={o.blok.kazanim || ""}
                         onChange={(kazanim) => onBlok(i, kazanimYaz(o.blok, kazanim))}
                         sade

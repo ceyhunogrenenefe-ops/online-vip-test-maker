@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mebKazanimBul, mebKazanimlari } from "../meb-kazanim.ts";
+import { mebKazanimBul, mebKazanimlari, yaziliGrupSirasi, yaziliYeri } from "../meb-kazanim.ts";
 
 test("7. sinif matematik satirlari resmî tablodan gelir", () => {
   const liste = mebKazanimlari("7. sınıf", "Matematik");
@@ -31,6 +31,15 @@ test("10. sinif felsefe yüklü tablodan secilir", () => {
 
 test("geometri tablosu bu pakette yok", () => {
   assert.equal(mebKazanimlari(9, "Geometri").length, 0);
+});
+
+test("kazanimlar 1. yazili ve 2. yazili olarak ayrilir", () => {
+  const liste = mebKazanimlari(7, "Matematik");
+  const biri = mebKazanimBul(7, "Matematik", "MAT.7.1.1");
+  assert.equal(yaziliYeri(biri!), "1");
+  assert.ok(liste.some((s) => yaziliYeri(s) === "2"));
+  assert.deepEqual(yaziliGrupSirasi("2. Yazılı")[0], "2. Yazılı");
+  assert.deepEqual(yaziliGrupSirasi("1. Yazılı")[0], "1. Yazılı");
 });
 
 test("8. sinif inkılap satirlari sosyal bilgiler dosyasindan okunur", () => {

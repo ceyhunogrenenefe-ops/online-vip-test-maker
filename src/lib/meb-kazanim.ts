@@ -73,6 +73,44 @@ export function mebKazanimlari(sinif: number | string, brans: string): MebSatir[
   });
 }
 
+export type YaziliYeri = "1" | "2" | "ikisi" | "yok";
+
+/** ODSGM satırındaki senaryo sayıları kazanımın hangi yazılıda olduğunu söyler. */
+export function yaziliYeri(s: Pick<MebSatir, "sinav1" | "sinav2">): YaziliYeri {
+  const bir = s.sinav1.some((n) => n > 0);
+  const iki = s.sinav2.some((n) => n > 0);
+  if (bir && iki) return "ikisi";
+  if (bir) return "1";
+  if (iki) return "2";
+  return "yok";
+}
+
+export function yaziliGrupAdi(s: Pick<MebSatir, "sinav1" | "sinav2">): string {
+  const y = yaziliYeri(s);
+  if (y === "1") return "1. Yazılı";
+  if (y === "2") return "2. Yazılı";
+  if (y === "ikisi") return "1. ve 2. Yazılı";
+  return "Yazılı senaryosunda yok";
+}
+
+export function yaziliKisaEtiket(s: Pick<MebSatir, "sinav1" | "sinav2">): string {
+  const y = yaziliYeri(s);
+  if (y === "1") return "1. yazılı";
+  if (y === "2") return "2. yazılı";
+  if (y === "ikisi") return "1. ve 2. yazılı";
+  return "senaryoda yok";
+}
+
+/** Föyün yazılı numarası eşleşen grup öne alınır. */
+export function yaziliGrupSirasi(yazili?: string): string[] {
+  const ikinci = (yazili || "").trim().startsWith("2");
+  const bir = "1. Yazılı";
+  const iki = "2. Yazılı";
+  const ikisi = "1. ve 2. Yazılı";
+  const yok = "Yazılı senaryosunda yok";
+  return ikinci ? [iki, ikisi, bir, yok] : [bir, ikisi, iki, yok];
+}
+
 /**
  * Metin, seçilen sınıf ve dersin resmî satırıyla birebir ya da koduyla
  * eşleşirse o satır döner. Yakın anlamlı serbest metin eşleşme sayılmaz.
