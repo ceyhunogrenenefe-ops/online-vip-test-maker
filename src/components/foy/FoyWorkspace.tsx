@@ -671,14 +671,14 @@ export function FoyWorkspace() {
           {arac === "kunye" ? <FoyKunyeForm kunye={kunye} onChange={setKunye} /> : null}
           {arac === "gorsel" ? (
             <div className="space-y-3">
-              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} yazili={kunye.yazili} value={kazanim} onChange={setKazanim} />
               <FoyFotograf onEkle={(b) => void pasteEkle(b)} onGorsel={gorselEkle} />
               <FoyYapistir onEkle={(b) => void pasteEkle(b)} />
             </div>
           ) : null}
           {arac === "yz" ? (
             <div className="space-y-2">
-              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} yazili={kunye.yazili} value={kazanim} onChange={setKazanim} />
               <FoyYzSoru
                 sinif={`${kunye.sinif}. sınıf`}
                 brans={kunye.brans}
@@ -690,7 +690,7 @@ export function FoyWorkspace() {
           ) : null}
           {arac === "metin" ? (
             <div className="space-y-2 text-xs">
-              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} yazili={kunye.yazili} value={kazanim} onChange={setKazanim} />
               <FoyYapistir onEkle={(b) => void pasteEkle(b)} />
               <div className="grid grid-cols-2 gap-2">
               <button type="button" className="rounded border bg-white px-2 py-2" onClick={() => {
@@ -721,7 +721,7 @@ export function FoyWorkspace() {
           ) : null}
           {arac === "banka" ? (
             <div className="space-y-2">
-            <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+            <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} yazili={kunye.yazili} value={kazanim} onChange={setKazanim} />
             <FoyBanka
               yenileme={bankaYenile}
               onEkle={(blok) => {
@@ -860,7 +860,7 @@ export function FoyWorkspace() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             <div className="mb-3">
-              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} value={kazanim} onChange={setKazanim} />
+              <FoyKazanimSec sinif={kunye.sinif} brans={kunye.brans} yazili={kunye.yazili} value={kazanim} onChange={setKazanim} />
             </div>
             <FoyPdfKirp
               ref={kirpRef}
