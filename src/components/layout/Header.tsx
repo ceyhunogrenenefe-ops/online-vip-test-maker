@@ -53,7 +53,7 @@ export function Header() {
   return (
     <header className="bg-dershanem-navy text-white shadow-lg">
       <div className="flex items-center justify-between px-4 py-2">
-        <div className="min-w-[200px]">
+        <div className="min-w-0">
           <h1 className="text-lg font-bold tracking-tight">
             Online VIP Test Maker
           </h1>

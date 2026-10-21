@@ -14,8 +14,6 @@ import { ocrTurkce } from "@/lib/ocr-text";
 import { yeniId } from "@/lib/foy-kunye";
 import type { GorselRol } from "@/lib/pdf-blocks";
 
-const MAX_BAYT = 40 * 1024 * 1024;
-
 const TUTAMAKLAR: { kenar: Exclude<SecimKenari, "tasi">; sinif: string }[] = [
   { kenar: "nw", sinif: "left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize" },
   { kenar: "n", sinif: "left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize" },
@@ -259,10 +257,6 @@ export const FoyPdfKirp = forwardRef<
       setHata("Yalnızca PDF seçin.");
       return;
     }
-    if (f.size > MAX_BAYT) {
-      setHata("PDF 40 MB sınırını aşıyor.");
-      return;
-    }
     onDosya(f);
     setKuyruk([]);
     setAktif(null);
@@ -492,7 +486,7 @@ export const FoyPdfKirp = forwardRef<
                           key={t.kenar}
                           role="presentation"
                           data-test={`foy-kirp-tutamak-${t.kenar}`}
-                          className={`absolute z-10 h-3.5 w-3.5 rounded-sm border-2 border-[#d72d42] bg-white ${t.sinif}`}
+                          className={`absolute z-10 h-6 w-6 touch-none rounded-sm border-2 border-[#d72d42] bg-white ${t.sinif}`}
                           onPointerDown={(e) => tutamakBasla(e, t.kenar)}
                         />
                       ))}

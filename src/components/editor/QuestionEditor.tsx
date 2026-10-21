@@ -49,7 +49,7 @@ export function QuestionEditor() {
   };
 
   return (
-    <div className="m-4 flex flex-1 flex-col rounded-xl bg-white p-6 shadow">
+    <div className="m-4 flex min-h-0 flex-1 flex-col overflow-y-auto rounded-xl bg-white p-6 shadow">
       <h2 className="mb-4 text-lg font-bold text-dershanem-navy">
         Soru Editörü
       </h2>

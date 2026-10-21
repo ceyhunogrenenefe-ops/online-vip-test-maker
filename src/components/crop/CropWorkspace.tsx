@@ -551,7 +551,7 @@ export function CropWorkspace() {
 
   if (!hasWorkspace) {
     return (
-      <div className="m-4 flex flex-1 flex-col gap-4">
+      <div className="m-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
