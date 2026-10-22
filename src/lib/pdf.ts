@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { OpticalFormPlacement, PaperSettings, Question } from "@/types";
 import { renderQuestionToDataUrl } from "./question-render";
+import { baskiIcinJpeg, gorselButcesi } from "./pdf-gorsel";
 import { registerTurkishFont, setTurkishFont } from "./pdf-font";
 import {
   corporateHeaderHeight,
@@ -375,6 +376,7 @@ export async function generateTestPdf(
     renderedEntries.map((e) => [e.id, e.url] as const)
   );
 
+  const gorselButce = gorselButcesi(layoutQuestions.length);
   const pageContentH = bottomLimit - startY - opticalReserve;
   const uniformPlan = uniformSizing
     ? await buildUniformSizingPlan(
@@ -507,16 +509,8 @@ export async function generateTestPdf(
       doc.setLineWidth(0.15);
       doc.rect(drawImgX - 0.5, imgY - 0.5, imgW + 1, imgH + 1);
 
-      doc.addImage(
-        renderedById.get(q.id)!,
-        "PNG",
-        drawImgX,
-        imgY,
-        imgW,
-        imgH,
-        undefined,
-        "SLOW"
-      );
+      const baski = await baskiIcinJpeg(renderedById.get(q.id)!, imgW, imgH, gorselButce);
+      doc.addImage(baski.url, baski.bicim, drawImgX, imgY, imgW, imgH, undefined, "FAST");
 
       const blockW = isFull
         ? pageInnerW + NUM_WIDTH
