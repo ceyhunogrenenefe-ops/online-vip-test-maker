@@ -8,8 +8,9 @@ import {
   drawCorporateHeader,
   drawFoyFiligran,
 } from "./pdf-corporate";
-import { blokCiz, blokYuksekligi, type DocBlock } from "./pdf-blocks";
-import { foyYerlesimPlani, planBlokSayisi } from "./foy-yerlesim";
+import { blokCiz, blokYuksekligi, gorselOlcu, type DocBlock } from "./pdf-blocks";
+import { baskiIcinJpeg, gorselButcesi } from "./pdf-gorsel";
+import { foyYerlesimPlani, planBlokSayisi, type FoySayfaPlani } from "./foy-yerlesim";
 import { cachedBrandKit, loadBrandKit } from "./brand-kit";
 import { cevapAnahtariSatirlari, foyBaskiBloklari, type BaskiEk } from "./foy-baski";
 import { numaraliSoruMu } from "./foy-icerik";
@@ -99,6 +100,37 @@ export function foyTeshisMesaji(t: FoyTeshis): string | null {
   return parcalar.length ? parcalar.join(" · ") : null;
 }
 
+async function foyGorselleriniSigdir(
+  sayfalar: FoySayfaPlani[],
+  sutunW: number,
+  tamW: number
+): Promise<Map<DocBlock, DocBlock>> {
+  const hedefler: { blok: Extract<DocBlock, { kind: "image" }>; w: number; h: number }[] = [];
+  for (const sayfa of sayfalar) {
+    for (const sutun of sayfa.sutunlar) {
+      for (const yerlesen of sutun) {
+        if (yerlesen.blok.kind !== "image") continue;
+        const olcu = gorselOlcu(yerlesen.blok, yerlesen.tamGenislik ? tamW : sutunW);
+        hedefler.push({ blok: yerlesen.blok, w: olcu.w, h: olcu.h });
+      }
+    }
+  }
+  const butce = gorselButcesi(hedefler.length);
+  const harita = new Map<DocBlock, DocBlock>();
+  const onbellek = new Map<string, string>();
+  for (const hedef of hedefler) {
+    const anahtar = `${hedef.w.toFixed(1)}|${hedef.h.toFixed(1)}|${hedef.blok.dataUrl}`;
+    let url = onbellek.get(anahtar);
+    if (!url) {
+      const baski = await baskiIcinJpeg(hedef.blok.dataUrl, hedef.w, hedef.h, butce);
+      url = baski.bicim === "JPEG" ? baski.url : hedef.blok.dataUrl;
+      onbellek.set(anahtar, url);
+    }
+    if (url !== hedef.blok.dataUrl) harita.set(hedef.blok, { ...hedef.blok, dataUrl: url });
+  }
+  return harita;
+}
+
 /**
  * Blokları iki sütuna ve gerektiği kadar sayfaya akıtır.
  * Alt bilgi, boş sayfalar değerlendirildikten sonra tüm sayfalara yazılır.
@@ -141,6 +173,7 @@ export async function foyPdfOlustur(
   );
 
   const logo = secenek.filigranLogo ? cachedBrandKit().logoDataUrl : undefined;
+  const sikisikGorsel = await foyGorselleriniSigdir(plan.sayfalar, sutunW, tamW);
 
   plan.sayfalar.forEach((sayfa, si) => {
     if (si > 0) doc.addPage();
@@ -168,7 +201,13 @@ export async function foyPdfOlustur(
       const x = kenar + ci * (sutunW + FOY_OLCU.sutunBoslugu);
       for (const yerlesen of sutun) {
         const genis = yerlesen.tamGenislik === true;
-        blokCiz(doc, yerlesen.blok, genis ? kenar : x, yerlesen.y, genis ? tamW : sutunW);
+        blokCiz(
+          doc,
+          sikisikGorsel.get(yerlesen.blok) ?? yerlesen.blok,
+          genis ? kenar : x,
+          yerlesen.y,
+          genis ? tamW : sutunW
+        );
       }
     });
   });

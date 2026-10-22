@@ -46,7 +46,7 @@ function gorselBaslik(b: Extract<DocBlock, { kind: "image" }>): string | null {
   return null;
 }
 
-function gorselOlcu(b: Extract<DocBlock, { kind: "image" }>, genislikMm: number) {
+export function gorselOlcu(b: Extract<DocBlock, { kind: "image" }>, genislikMm: number) {
   let w = genislikMm;
   let h = w / (b.aspect || 1);
   const maxH = b.maxHeightMm ?? 60;
