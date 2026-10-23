@@ -46,6 +46,7 @@ export function foyBaskiBloklari(
     const devral =
       onceki?.tamGenislik && (b.kind === "answerLines" || b.kind === "qr") ? true : b.tamGenislik;
     out.push(devral ? { ...b, tamGenislik: true } : b);
+    const soruYeri = out.length - 1;
     const soru = b.kind === "question" || (b.kind === "image" && b.rol === "soru");
     if (!soru) continue;
     const sonraki = bloklar[i + 1];
@@ -56,7 +57,11 @@ export function foyBaskiBloklari(
     if (stil && adet > 0 && sonraki?.kind !== "answerLines") {
       out.push({ kind: "answerLines", count: adet, style: stil, tamGenislik: b.tamGenislik });
     }
-    if (ek?.[i]?.qr) out.push({ ...ek[i].qr, tamGenislik: b.tamGenislik } as DocBlock);
+    const qr = ek?.[i]?.qr;
+    const soruBlok = out[soruYeri];
+    if (qr?.kind === "qr" && (soruBlok?.kind === "question" || soruBlok?.kind === "image")) {
+      out[soruYeri] = { ...soruBlok, videoQr: qr.dataUrl };
+    }
   }
   return out;
 }
