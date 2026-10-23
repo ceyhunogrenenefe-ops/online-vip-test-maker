@@ -21,13 +21,13 @@ export type DocBlock =
   | { kind: "sectionTitle"; text: string; tamGenislik?: boolean }
   | { kind: "paragraph"; runs: Run[]; tamGenislik?: boolean }
   | { kind: "list"; ordered: boolean; items: Run[][]; tamGenislik?: boolean }
-  | { kind: "question"; no?: number; stem: Run[]; options: { label: string; runs: Run[] }[]; tamGenislik?: boolean; kazanim?: string }
+  | { kind: "question"; no?: number; stem: Run[]; options: { label: string; runs: Run[] }[]; tamGenislik?: boolean; kazanim?: string; videoQr?: string }
   | { kind: "table"; rows: string[][]; baslikSatiri?: boolean; tamGenislik?: boolean }
   | { kind: "formula"; render: RenderedFormula; latex?: string; tamGenislik?: boolean }
   | { kind: "infoBox"; tone: "bilgi" | "dikkat"; title: string; text: string; tamGenislik?: boolean }
   | { kind: "answerLines"; count: number; style?: "lines" | "grid" | "blank"; tamGenislik?: boolean }
   | { kind: "qr"; dataUrl: string; url: string; tamGenislik?: boolean }
-  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number; rol?: GorselRol; no?: number; tamGenislik?: boolean; kazanim?: string }
+  | { kind: "image"; dataUrl: string; aspect: number; maxHeightMm?: number; rol?: GorselRol; no?: number; tamGenislik?: boolean; kazanim?: string; videoQr?: string }
   | { kind: "spacer"; heightMm: number; tamGenislik?: boolean }
   /** Öğretmenin bilinçli kestiği akış. Yerleşim bunları içerik sanmaz. */
   | { kind: "pageBreak"; tamGenislik?: boolean }
@@ -38,6 +38,18 @@ const SATIR_MM = 4.2;
 const BASLIK_H_MM = 7;
 const SORU_BASLIK_H_MM = 6;
 const KUTU_IC_BOSLUK = 3.2;
+/** Soru numarasının altındaki video karekodu. Ayrı satır açmaz. */
+const VIDEO_QR_MM = 16;
+const VIDEO_QR_BOSLUK = 1.5;
+
+/** Karekod sol şeritte durunca görselin kalan genişliği. */
+export function gorselAlanGenisligi(
+  b: Extract<DocBlock, { kind: "image" }>,
+  genislikMm: number
+): number {
+  if (!b.videoQr) return genislikMm;
+  return Math.max(24, genislikMm - VIDEO_QR_MM - VIDEO_QR_BOSLUK);
+}
 
 function gorselBaslik(b: Extract<DocBlock, { kind: "image" }>): string | null {
   if (b.rol === "aciklama") return "AÇIKLAMA";
@@ -135,12 +147,15 @@ export function blokYuksekligi(doc: jsPDF, b: DocBlock, genislikMm: number): num
     }
 
     case "question": {
-      const kok = satirlariBol(doc, runlariDuzMetne(b.stem), genislikMm - 6);
-      let h = kazanimYukseklik(kazanimSatirlari(doc, b.kazanim, genislikMm)) + SORU_BASLIK_H_MM + 2 + kok.length * SATIR_MM + 1.5;
+      const sol = b.videoQr ? VIDEO_QR_MM + VIDEO_QR_BOSLUK : 0;
+      const kazanim = kazanimYukseklik(kazanimSatirlari(doc, b.kazanim, genislikMm));
+      const kok = satirlariBol(doc, runlariDuzMetne(b.stem), Math.max(12, genislikMm - 6 - sol));
+      let h = kazanim + SORU_BASLIK_H_MM + 2 + kok.length * SATIR_MM + 1.5;
       for (const o of b.options) {
-        const satir = satirlariBol(doc, runlariDuzMetne(o.runs), genislikMm - 10);
+        const satir = satirlariBol(doc, runlariDuzMetne(o.runs), Math.max(12, genislikMm - 10 - sol));
         h += Math.max(SATIR_MM, satir.length * SATIR_MM);
       }
+      if (b.videoQr) h = Math.max(h, kazanim + SORU_BASLIK_H_MM + 1 + VIDEO_QR_MM + 2);
       return h + 3;
     }
 
@@ -164,16 +179,20 @@ export function blokYuksekligi(doc: jsPDF, b: DocBlock, genislikMm: number): num
       return (b.style === "grid" ? 8 : 7) * b.count + 2;
 
     case "qr":
-      return 30;
+      return VIDEO_QR_MM + 2;
 
     case "pageBreak":
     case "columnBreak":
       return 0;
 
     case "image": {
-      const olcu = gorselOlcu(b, genislikMm);
+      const olcu = gorselOlcu(b, gorselAlanGenisligi(b, genislikMm));
       const kazanimH =
         b.rol === "soru" ? kazanimYukseklik(kazanimSatirlari(doc, b.kazanim, genislikMm)) : 0;
+      if (b.videoQr) {
+        const solH = (olcu.baslik ? SORU_BASLIK_H_MM + 1 : 0) + VIDEO_QR_MM;
+        return kazanimH + Math.max(solH, olcu.h) + 3;
+      }
       return kazanimH + (olcu.baslik ? SORU_BASLIK_H_MM + 1.5 : 0) + olcu.h + 3;
     }
   }
@@ -279,17 +298,30 @@ export function blokCiz(
       );
       doc.setTextColor("#374151");
 
-      let imlecY = runlariYaz(doc, b.stem, x + 1, ySoru + SORU_BASLIK_H_MM + 4.5, genislikMm - 6);
+      const sol = b.videoQr ? VIDEO_QR_MM + VIDEO_QR_BOSLUK : 0;
+      if (b.videoQr) {
+        const bicim = b.videoQr.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+        doc.addImage(b.videoQr, bicim, x, ySoru + SORU_BASLIK_H_MM + 1, VIDEO_QR_MM, VIDEO_QR_MM);
+      }
+
+      let imlecY = runlariYaz(
+        doc,
+        b.stem,
+        x + 1 + sol,
+        ySoru + SORU_BASLIK_H_MM + 4.5,
+        Math.max(12, genislikMm - 6 - sol)
+      );
       imlecY += 1;
 
       for (const o of b.options) {
         govdeYaz(doc, GOVDE_PT, true);
         doc.setTextColor(KURUMSAL.lacivert);
-        doc.text(`${o.label})`, x + 3, imlecY);
+        doc.text(`${o.label})`, x + 3 + sol, imlecY);
         doc.setTextColor("#374151");
-        imlecY = runlariYaz(doc, o.runs, x + 9, imlecY, genislikMm - 10);
+        imlecY = runlariYaz(doc, o.runs, x + 9 + sol, imlecY, Math.max(12, genislikMm - 10 - sol));
       }
-      return imlecY + 2;
+      const qrAlt = b.videoQr ? ySoru + SORU_BASLIK_H_MM + 1 + VIDEO_QR_MM : imlecY;
+      return Math.max(imlecY, qrAlt) + 2;
     }
 
     case "table": {
@@ -365,17 +397,10 @@ export function blokCiz(
     }
 
     case "qr": {
-      const kenar = Math.min(22, genislikMm);
+      const kenar = Math.min(VIDEO_QR_MM, genislikMm);
       const bicim = b.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
       doc.addImage(b.dataUrl, bicim, x, y, kenar, kenar);
-      govdeYaz(doc, 8, true);
-      doc.setTextColor(KURUMSAL.lacivert);
-      doc.text("Video çözüm", x + kenar + 2, y + 6);
-      govdeYaz(doc, 7);
-      doc.setTextColor("#374151");
-      const adres = satirlariBol(doc, b.url, genislikMm - kenar - 3).slice(0, 3);
-      adres.forEach((l, i) => doc.text(l, x + kenar + 2, y + 11 + i * 3.6));
-      return y + Math.max(kenar, 18) + 4;
+      return y + kenar + 2;
     }
 
     case "answerLines": {
@@ -404,11 +429,32 @@ export function blokCiz(
       return y;
 
     case "image": {
-      const olcu = gorselOlcu(b, genislikMm);
+      const alan = gorselAlanGenisligi(b, genislikMm);
+      const olcu = gorselOlcu(b, alan);
       const yGorsel =
         b.rol === "soru"
           ? kazanimCiz(doc, kazanimSatirlari(doc, b.kazanim, genislikMm), x, y, genislikMm)
           : y;
+      if (b.videoQr) {
+        const sol = genislikMm - alan;
+        if (olcu.baslik) {
+          const kisa = b.rol === "soru";
+          const etiketW = kisa ? 8 : Math.min(sol, 28);
+          doc.setFillColor(KURUMSAL.lacivert);
+          doc.roundedRect(x, yGorsel, etiketW, SORU_BASLIK_H_MM, 1, 1, "F");
+          doc.setTextColor("#ffffff");
+          govdeYaz(doc, kisa ? 11 : 8, true);
+          doc.text(olcu.baslik, x + (kisa ? 2.4 : 1.6), yGorsel + 4.3);
+          doc.setTextColor("#374151");
+        }
+        const qrY = yGorsel + (olcu.baslik ? SORU_BASLIK_H_MM + 1 : 0);
+        const qrBicim = b.videoQr.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+        doc.addImage(b.videoQr, qrBicim, x, qrY, VIDEO_QR_MM, VIDEO_QR_MM);
+        const bicim = b.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+        doc.addImage(b.dataUrl, bicim, x + sol + (alan - olcu.w) / 2, yGorsel, olcu.w, olcu.h);
+        const solH = (olcu.baslik ? SORU_BASLIK_H_MM + 1 : 0) + VIDEO_QR_MM;
+        return yGorsel + Math.max(solH, olcu.h) + 3;
+      }
       let iy = yGorsel;
       if (olcu.baslik) {
         const kisa = b.rol === "soru";

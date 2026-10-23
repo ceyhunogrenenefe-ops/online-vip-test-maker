@@ -8,7 +8,7 @@ import {
   drawCorporateHeader,
   drawFoyFiligran,
 } from "./pdf-corporate";
-import { blokCiz, blokYuksekligi, gorselOlcu, type DocBlock } from "./pdf-blocks";
+import { blokCiz, blokYuksekligi, gorselAlanGenisligi, gorselOlcu, type DocBlock } from "./pdf-blocks";
 import { baskiIcinJpeg, gorselButcesi } from "./pdf-gorsel";
 import { foyYerlesimPlani, planBlokSayisi, type FoySayfaPlani } from "./foy-yerlesim";
 import { cachedBrandKit, loadBrandKit } from "./brand-kit";
@@ -110,7 +110,10 @@ async function foyGorselleriniSigdir(
     for (const sutun of sayfa.sutunlar) {
       for (const yerlesen of sutun) {
         if (yerlesen.blok.kind !== "image") continue;
-        const olcu = gorselOlcu(yerlesen.blok, yerlesen.tamGenislik ? tamW : sutunW);
+        const olcu = gorselOlcu(
+          yerlesen.blok,
+          gorselAlanGenisligi(yerlesen.blok, yerlesen.tamGenislik ? tamW : sutunW)
+        );
         hedefler.push({ blok: yerlesen.blok, w: olcu.w, h: olcu.h });
       }
     }

@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { blokEtiketi, kazanimSatiri, kazanimYaz } from "@/lib/foy-icerik";
 import { kapakSatirlari, type FoyKunye } from "@/lib/foy-kunye";
 import type { FoyOge } from "@/lib/foy-baski";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
-import { videoLinkiGecerli } from "@/lib/video-qr";
+import { videoLinkiGecerli, videoQrDataUrl } from "@/lib/video-qr";
 import { FoyGorselSilgi } from "./FoyGorselSilgi";
 import { FoyKazanimSec } from "./FoyKazanimSec";
 
@@ -124,7 +125,33 @@ export function FoySayfa({
                     <Trash2 size={14} />
                   </button>
                 </div>
-                {o.blok.kind === "image" ? (
+                {o.blok.kind === "image" &&
+                o.blok.rol === "soru" &&
+                o.blok.no &&
+                o.videoUrl &&
+                videoLinkiGecerli(o.videoUrl) ? (
+                  <div className="mt-1 flex items-start gap-1">
+                    <div className="flex w-12 shrink-0 flex-col">
+                      <span className="rounded-br bg-[#173b70] px-1.5 py-0.5 text-center text-xs font-bold text-white">
+                        {o.blok.no}
+                      </span>
+                      <SoruKarekod url={o.videoUrl} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {secili === i ? (
+                        <FoyGorselSilgi
+                          dataUrl={o.blok.dataUrl}
+                          onUygula={(dataUrl) => {
+                            if (o.blok.kind !== "image") return;
+                            onBlok(i, { ...o.blok, dataUrl });
+                          }}
+                        />
+                      ) : (
+                        <img src={o.blok.dataUrl} alt="" className="max-h-40 w-full object-contain" />
+                      )}
+                    </div>
+                  </div>
+                ) : o.blok.kind === "image" ? (
                   <div className="relative mt-1">
                     {o.blok.rol === "soru" && o.blok.no ? (
                       <span className="pointer-events-none absolute left-0 top-0 rounded-br bg-[#173b70] px-1.5 py-0.5 text-xs font-bold text-white">
@@ -164,7 +191,22 @@ export function FoySayfa({
                         sade
                       />
                     ) : null}
-                    {o.blok.kind === "question" || o.blok.kind === "paragraph" || o.blok.kind === "sectionTitle" ? (
+                    {o.blok.kind === "question" && o.videoUrl && videoLinkiGecerli(o.videoUrl) ? (
+                      <div className="flex items-start gap-1">
+                        <div className="flex w-12 shrink-0 flex-col">
+                          <span className="rounded bg-[#173b70] px-1.5 py-0.5 text-center text-xs font-bold text-white">
+                            {o.blok.no ?? "?"}
+                          </span>
+                          <SoruKarekod url={o.videoUrl} />
+                        </div>
+                        <textarea
+                          value={metinOku(o.blok)}
+                          onChange={(e) => onBlok(i, metinYaz(o.blok, e.target.value))}
+                          rows={3}
+                          className="min-w-0 flex-1 rounded border px-2 py-1 text-xs"
+                        />
+                      </div>
+                    ) : o.blok.kind === "question" || o.blok.kind === "paragraph" || o.blok.kind === "sectionTitle" ? (
                       <textarea
                         value={metinOku(o.blok)}
                         onChange={(e) => onBlok(i, metinYaz(o.blok, e.target.value))}
@@ -289,7 +331,9 @@ export function FoySayfa({
                         {o.videoUrl && !videoLinkiGecerli(o.videoUrl) ? (
                           <p className="col-span-2 text-[11px] text-red-600">Link http veya https ile başlamalı.</p>
                         ) : o.videoUrl ? (
-                          <p className="col-span-2 text-[11px] text-slate-500">Sayfada karekod olarak basılır.</p>
+                          <p className="col-span-2 text-[11px] text-slate-500">
+                            Karekod soru numarasının altında basılır. Link yazılmaz.
+                          </p>
                         ) : null}
                       </div>
                     ) : null}
@@ -302,6 +346,30 @@ export function FoySayfa({
       </article>
     </div>
   );
+}
+
+function SoruKarekod({ url }: { url: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    const gecerli = videoLinkiGecerli(url);
+    if (!gecerli) {
+      setSrc(null);
+      return;
+    }
+    let iptal = false;
+    videoQrDataUrl(gecerli)
+      .then((s) => {
+        if (!iptal) setSrc(s);
+      })
+      .catch(() => {
+        if (!iptal) setSrc(null);
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [url]);
+  if (!src) return null;
+  return <img src={src} alt="Video çözüm karekodu" className="mt-0.5 h-11 w-11 bg-white" />;
 }
 
 function metinOku(b: DocBlock): string {
