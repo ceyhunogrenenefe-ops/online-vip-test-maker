@@ -152,3 +152,21 @@ export function kenarNumaralari(
   if (bas >= 0) bitir(solUc.length - 1);
   return out;
 }
+
+/**
+ * Soru gövdesinden sonra uzun bir boş şerit varsa altındakini (sayfa altlığı,
+ * numara dairesi vb.) atar. `dolu(y)` satırda mürekkep olup olmadığını söyler.
+ */
+export function boslukSonrasiniAt(h: number, dolu: (y: number) => boolean, enUzunBosluk: number): number {
+  let icerikGoruldu = false;
+  let bos = 0;
+  for (let y = 0; y < h; y++) {
+    if (dolu(y)) {
+      icerikGoruldu = true;
+      bos = 0;
+    } else if (icerikGoruldu && ++bos >= enUzunBosluk) {
+      return y - bos + 1;
+    }
+  }
+  return h;
+}

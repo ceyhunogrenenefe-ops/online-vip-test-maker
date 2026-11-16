@@ -4,11 +4,21 @@ import { useMemo, useState } from "react";
 import type { HavuzVeri } from "@/components/deneme/DenemeStudyo";
 import { HavuzGorsel } from "@/components/deneme/HavuzGorsel";
 import { FORMATLAR, formatBul } from "@/lib/deneme/format";
-import { denemeleriYaz, gorselOku, type DenemeTaslak, type HavuzSoru } from "@/lib/deneme/havuz";
+import { denemeleriYaz, gorselOku, gorselleriYaz, gorselSil, sinavLinki, type DenemeTaslak, type HavuzSoru } from "@/lib/deneme/havuz";
 import { cevapAnahtariPdf, kitapcikOlustur, type Kitap } from "@/lib/deneme/kitapcik";
 import { otomatikTamamla, secimDegistir } from "@/lib/deneme/secim";
 
 const anahtar = (test: string, ders: string) => `${test}|${ders}`;
+
+function varsayilanSinavAdi(formatId: string) {
+  if (formatId === "LGS") return "Liselere Geçiş Sistemi";
+  if (["TYT", "AYT", "9", "10", "11"].includes(formatId)) return "Yükseköğretim Kurumları Sınavı";
+  return "Ortaokul Deneme Sınavı";
+}
+
+function kitapAyar(t: DenemeTaslak): NonNullable<DenemeTaslak["kitap"]> {
+  return t.kitap ?? { kurum: "Online VIP Dershane", denemeNo: "1", sinavAdi: varsayilanSinavAdi(t.formatId), kitapcikTuru: "A", kapak: false };
+}
 
 function yeniTaslak(formatId: string): DenemeTaslak {
   const f = formatBul(formatId);
@@ -218,7 +228,21 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
       }
       if (testler.length) oturumlar.push({ ad: o.ad, sureDakika: o.sureDakika, testler });
     }
-    return { ad: taslak.ad, formatAd: format.ad, kurum: "Online VIP Dershane", sikSayisi: taslak.sikSayisi, ceza: taslak.ceza, oturumlar };
+    const ayar = kitapAyar(taslak);
+    return {
+      ad: taslak.ad,
+      formatAd: format.ad,
+      sinavAdi: ayar.sinavAdi,
+      kurum: ayar.kurum,
+      denemeNo: ayar.denemeNo,
+      kitapcikTuru: ayar.kitapcikTuru,
+      kod: taslak.yayin?.kod ?? taslak.id.replace(/[^0-9]/g, "").slice(0, 8),
+      sikSayisi: taslak.sikSayisi,
+      ceza: taslak.ceza,
+      oturumlar,
+      kapakGorsel: ayar.kapak ? await gorselOku(`kapak:${taslak.id}`) : null,
+      logo: await gorselOku("logo"),
+    };
   };
 
   const calistir = async (ad: string, fn: () => Promise<void>) => {
@@ -412,6 +436,75 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
       </section>
 
       <section className="rounded-xl bg-white p-4 shadow">
+        <h3 className="font-bold text-dershanem-navy">Kitapçık ayarları</h3>
+        <div className="mt-2 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          {(
+            [
+              ["kurum", "Kurum adı"],
+              ["sinavAdi", "Kapaktaki sınav adı"],
+              ["denemeNo", "Deneme no"],
+              ["kitapcikTuru", "Kitapçık türü"],
+            ] as const
+          ).map(([alan, etiket]) => (
+            <label key={alan}>
+              {etiket}
+              <input
+                className="mt-1 w-full rounded border px-2 py-1"
+                value={kitapAyar(taslak)[alan]}
+                onChange={(e) => void kaydet({ ...taslak, kitap: { ...kitapAyar(taslak), [alan]: e.target.value } })}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          <label className="cursor-pointer rounded border px-3 py-1.5 font-semibold hover:bg-slate-50">
+            {kitapAyar(taslak).kapak ? "Kapak görselini değiştir" : "Kendi kapak görselini yükle"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                await gorselleriYaz([[`kapak:${taslak.id}`, f]]);
+                await kaydet({ ...taslak, kitap: { ...kitapAyar(taslak), kapak: true } });
+              }}
+            />
+          </label>
+          {kitapAyar(taslak).kapak ? (
+            <button
+              type="button"
+              className="text-red-700"
+              onClick={async () => {
+                await gorselSil(`kapak:${taslak.id}`);
+                await kaydet({ ...taslak, kitap: { ...kitapAyar(taslak), kapak: false } });
+              }}
+            >
+              Hazır kapağa dön
+            </button>
+          ) : (
+            <span className="text-slate-500">Yüklenmezse yayınevi tarzı kapak otomatik hazırlanır.</span>
+          )}
+          <label className="cursor-pointer rounded border px-3 py-1.5 font-semibold hover:bg-slate-50">
+            Kurum logosu yükle
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) await gorselleriYaz([["logo", f]]);
+                setHata("");
+                setIs("");
+              }}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-white p-4 shadow">
         <h3 className="font-bold text-dershanem-navy">Çıktılar</h3>
         <div className="mt-2 flex flex-wrap gap-2">
           <button
@@ -442,11 +535,11 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
           {taslak.yayin ? (
             <div className="flex flex-wrap items-center gap-2 rounded bg-green-50 px-3 py-2 text-sm">
               <span className="font-semibold text-green-800">Online sınav linki:</span>
-              <code>{`${typeof window !== "undefined" ? window.location.origin : ""}/sinav/${taslak.yayin.kod}`}</code>
+              <code>{sinavLinki(taslak.yayin.kod)}</code>
               <button
                 type="button"
                 className="rounded border bg-white px-2 py-0.5"
-                onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/sinav/${taslak.yayin!.kod}`)}
+                onClick={() => void navigator.clipboard.writeText(sinavLinki(taslak.yayin!.kod))}
               >
                 Kopyala
               </button>

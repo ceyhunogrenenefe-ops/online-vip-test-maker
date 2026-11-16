@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { sinavLinki } from "@/lib/deneme/havuz";
 import type { DersSonuc } from "@/lib/deneme/model";
 
 type DenemeOzet = { id: string; kod: string; ad: string; yayin: boolean; olusturma: number };
@@ -10,8 +11,10 @@ type SonucSatir = {
   ad: string;
   soyad: string;
   telefonMaske: string;
+  telefon?: string;
   telefonKaynak: string;
   teslim: boolean;
+  teslimZamani?: number | null;
   sonuc: { dogru: number; yanlis: number; bos: number; net: number; dersler: DersSonuc[] } | null;
   sms: SmsKayit[];
 };
@@ -25,6 +28,36 @@ async function api<T>(sorgu: string, body?: unknown): Promise<T> {
   const json = (await r.json()) as T & { hata?: string };
   if (!r.ok) throw new Error(json.hata || "İşlem tamamlanamadı.");
   return json;
+}
+
+function excelIndir(ad: string, satirlar: SonucSatir[]) {
+  const dersler = [...new Set(satirlar.flatMap((o) => o.sonuc?.dersler.map((d) => d.ders) ?? []))];
+  const hucre = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const baslik = ["Ad", "Soyad", "Telefon", "Telefon kaynağı", "Durum", "Teslim zamanı", "Doğru", "Yanlış", "Boş", "Net", ...dersler.map((d) => `${d} net`)];
+  const govde = satirlar.map((o) => [
+    o.ad,
+    o.soyad,
+    o.telefon || o.telefonMaske,
+    o.telefonKaynak === "giris" ? "Öğrencinin girdiği" : o.telefonKaynak === "veli" ? "Veli kaydı" : "Öğrenci kaydı",
+    o.teslim ? "Teslim etti" : "Devam ediyor",
+    o.teslimZamani ? new Date(o.teslimZamani).toLocaleString("tr-TR") : "",
+    o.sonuc?.dogru ?? "",
+    o.sonuc?.yanlis ?? "",
+    o.sonuc?.bos ?? "",
+    o.sonuc ? String(o.sonuc.net).replace(".", ",") : "",
+    ...dersler.map((d) => {
+      const x = o.sonuc?.dersler.find((y) => y.ders === d);
+      return x ? String(x.net).replace(".", ",") : "";
+    }),
+  ]);
+  // Türkçe Excel noktalı virgül ayırıcı ve BOM ister.
+  const csv = "\uFEFF" + [baslik, ...govde].map((r) => r.map(hucre).join(";")).join("\r\n");
+  const u = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = u;
+  a.download = `${ad} - katılımcılar.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(u), 5000);
 }
 
 /** Online yayımlanan denemelerin teslimleri ve SMS durumu. */
@@ -71,8 +104,8 @@ export function YayinSonuclari() {
         {aktif ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span className="font-semibold">Link:</span>
-            <code>{`${window.location.origin}/sinav/${aktif.kod}`}</code>
-            <button type="button" className="rounded border px-2" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/sinav/${aktif.kod}`)}>
+            <code>{sinavLinki(aktif.kod)}</code>
+            <button type="button" className="rounded border px-2" onClick={() => void navigator.clipboard.writeText(sinavLinki(aktif.kod))}>
               Kopyala
             </button>
             <a className="rounded border px-2" href={`/onizleme/${aktif.id}`} target="_blank" rel="noreferrer">
@@ -84,7 +117,20 @@ export function YayinSonuclari() {
 
       {aktif ? (
         <section className="rounded-xl bg-white p-4 shadow">
-          <h3 className="font-bold text-dershanem-navy">Teslimler ve SMS</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-bold text-dershanem-navy">Katılımcılar ({sonuclar.length})</h3>
+            <button
+              type="button"
+              disabled={!sonuclar.length}
+              className="ml-auto rounded bg-green-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={() => excelIndir(aktif.ad, sonuclar)}
+            >
+              Excel’e indir
+            </button>
+            <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => void getir(aktif)}>
+              Yenile
+            </button>
+          </div>
           <div className="mt-2 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
@@ -102,11 +148,17 @@ export function YayinSonuclari() {
                     <tr key={o.id} className="border-b align-top">
                       <td className="py-2 pr-2">
                         {o.ad} {o.soyad}
-                        <div className="text-xs text-slate-500">
-                          {o.telefonKaynak === "giris" ? "Girilen numara" : o.telefonKaynak === "veli" ? "Veli kaydı" : "Öğrenci kaydı"} {o.telefonMaske}
+                        <div className="text-xs text-slate-600">
+                          <a className="font-semibold text-dershanem-blue" href={`tel:${o.telefon || ""}`}>
+                            {o.telefon || o.telefonMaske}
+                          </a>{" "}
+                          · {o.telefonKaynak === "giris" ? "öğrencinin girdiği" : o.telefonKaynak === "veli" ? "veli kaydı" : "öğrenci kaydı"}
                         </div>
                       </td>
-                      <td className="py-2 pr-2">{o.teslim ? "Teslim etti" : "Devam ediyor"}</td>
+                      <td className="py-2 pr-2">
+                        {o.teslim ? "Teslim etti" : "Devam ediyor"}
+                        {o.teslimZamani ? <div className="text-xs text-slate-500">{new Date(o.teslimZamani).toLocaleString("tr-TR")}</div> : null}
+                      </td>
                       <td className="py-2 pr-2">
                         {o.sonuc ? (
                           <>

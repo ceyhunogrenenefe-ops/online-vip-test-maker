@@ -173,6 +173,20 @@ export function PdfInceleme({
         <span className="text-sm text-slate-500">
           {sorular.length} soru · {sorular.filter((s) => s.dogru).length} cevaplı
         </span>
+        <button
+          type="button"
+          className="ml-auto rounded border bg-white px-3 py-1 text-sm"
+          title="Kesim iyileştirmelerini eski sorulara da uygular"
+          onClick={async () => {
+            setMesaj("Sorular yeniden kesiliyor…");
+            const yeni: HavuzSoru[] = [];
+            for (const s of sorular) yeni.push(await soruYenidenKes(pdf, s));
+            await kaydet(yeni);
+            setMesaj(`${yeni.length} soru yeniden kesildi.`);
+          }}
+        >
+          Tümünü yeniden kes
+        </button>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
