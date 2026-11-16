@@ -27,7 +27,7 @@ export function soruSec(havuz: Soru[], bolumler: Bolum[], pdfIdler: string[]): S
       const incelemede = aday.filter((s) => s.inceleme || !s.dogru).length;
       const hazir = aday.filter((s) => {
         const k = kok(s.metin);
-        return !s.inceleme && s.dogru && !kullanilan.has(s.id) && (!k || !kokler.has(k));
+        return !s.inceleme && !kullanilan.has(s.id) && (!k || !kokler.has(k));
       });
       const al = hazir.slice(0, istek.adet);
       for (const s of al) {

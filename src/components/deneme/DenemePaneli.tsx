@@ -219,6 +219,57 @@ export function DenemePaneli() {
     }
   };
 
+  const yeniDeneme = async () => {
+    const idler = seciliPdf.length ? seciliPdf : anahtarPdf ? [anahtarPdf] : [];
+    const havuz = sorular.filter((s) => idler.includes(s.pdfId) && s.numara && s.ders !== "Belirsiz" && !s.inceleme);
+    if (!havuz.length) {
+      setHata("Kesilmiş soru yok. Önce PDF’i otomatik kesin.");
+      return;
+    }
+    const say = new Map<string, number>();
+    for (const s of havuz) say.set(s.ders, (say.get(s.ders) || 0) + 1);
+    const sozelAd = ["Türkçe", "T.C. İnkılap Tarihi ve Atatürkçülük", "Din Kültürü ve Ahlak Bilgisi", "İngilizce"];
+    const sayisalAd = ["Matematik", "Fen Bilimleri"];
+    const al = (adlar: string[]) => adlar.filter((d) => say.has(d)).map((d) => ({ ders: d, adet: say.get(d)! }));
+    const sozel = al(sozelAd);
+    const sayisal = al(sayisalAd);
+    const diger = [...say.keys()]
+      .filter((d) => !sozelAd.includes(d) && !sayisalAd.includes(d))
+      .map((d) => ({ ders: d, adet: say.get(d)! }));
+    const bloklar: Bolum[] = [];
+    if (sozel.length) bloklar.push({ id: crypto.randomUUID(), ad: "Sözel", sureDakika: 75, dersler: sozel });
+    if (sayisal.length) bloklar.push({ id: crypto.randomUUID(), ad: "Sayısal", sureDakika: 80, dersler: sayisal });
+    if (diger.length) bloklar.push({ id: crypto.randomUUID(), ad: "Diğer", sureDakika: 40, dersler: diger });
+    setBolumler(bloklar);
+    const pdfAd = pdfler.find((p) => p.id === (anahtarPdf || idler[0]))?.ad.replace(/\.pdf$/i, "") || "Yeni Deneme";
+    const denemeAd = ad.trim() && ad !== "LGS Deneme" ? ad.trim() : pdfAd;
+    setAd(denemeAd);
+    setHata("");
+    try {
+      const sonuc = await api<{ deneme: DenemeOzet; eksikler: EksikDers[] }>("", {
+        op: "olustur",
+        ad: denemeAd,
+        yanlisCezasi: Number(ceza),
+        smsAlici: alici,
+        bolumler: bloklar,
+        pdfIdler: idler,
+      });
+      setAktif(sonuc.deneme);
+      setEksikler(sonuc.eksikler);
+      await yenile();
+      const cevapsiz = havuz.filter((s) => !s.dogru).length;
+      setDurum(
+        sonuc.eksikler.length
+          ? "Deneme taslak. Eksik dersler aşağıda."
+          : cevapsiz
+            ? `Yeni deneme oluştu. ${cevapsiz} sorunun cevabı yok; anahtarı eşleştirip yayımlayın.`
+            : "Yeni deneme oluştu. Yayımlayabilirsiniz."
+      );
+    } catch (e) {
+      setHata(e instanceof Error ? e.message : "Deneme oluşturulamadı.");
+    }
+  };
+
   const olustur = async () => {
     setHata("");
     try {
@@ -359,6 +410,13 @@ export function DenemePaneli() {
             Cevapları eşleştir
           </button>
         </div>
+        <button
+          type="button"
+          className="mt-4 rounded-lg bg-dershanem-navy px-4 py-2 text-sm font-semibold text-white"
+          onClick={() => void yeniDeneme()}
+        >
+          Yeni deneme oluştur
+        </button>
         <h3 className="mt-4 text-sm font-bold text-dershanem-navy">Elle kes</h3>
         <p className="mt-1 text-xs text-slate-500">Otomatik kesemediği sorunun çevresini çizin.</p>
         <div className="mt-3">

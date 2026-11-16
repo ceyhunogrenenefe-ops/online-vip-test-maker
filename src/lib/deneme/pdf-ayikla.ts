@@ -2,7 +2,7 @@ import { openPdfDocument } from "../pdf-document";
 import { ocrTurkce } from "../ocr-text";
 import { ayikla } from "./ayikla";
 import type { AyiklananSoru, Kutu, SayfaGirdi } from "./model";
-import { satirlaraBol } from "./pdf-satir";
+import { sinavSatirlari } from "./pdf-satir";
 
 type Kanvas = { canvas: HTMLCanvasElement; scale: number };
 
@@ -113,13 +113,13 @@ export async function pdfdenAyikla(
         h,
       });
     }
-    let satirlar = satirlaraBol(parcalar);
+    let satirlar = sinavSatirlari(parcalar, taban.width);
     const ham = satirlar.map((s) => s.metin).join("");
     const ocr = ham.replace(/\s/g, "").length < 25;
     if (ocr) {
       ilerleme?.(`${file.name}: sayfa ${n} taranmış, yazı okunuyor`);
       const sonuc = await ocrTurkce(canvas.toDataURL("image/jpeg", 0.85));
-      satirlar = satirlaraBol(
+      satirlar = sinavSatirlari(
         sonuc.satirlar
           .filter((s) => s.text.trim())
           .map((s) => ({
@@ -129,7 +129,8 @@ export async function pdfdenAyikla(
             w: Math.max(4, (s.bbox.x1 - s.bbox.x0) / scale),
             h: Math.max(8, (s.bbox.y1 - s.bbox.y0) / scale),
             guven: s.confidence,
-          }))
+          })),
+        taban.width
       );
     }
     sayfalar.push({
