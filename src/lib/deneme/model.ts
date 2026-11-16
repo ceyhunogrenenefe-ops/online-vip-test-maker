@@ -1,8 +1,8 @@
 /** PDF deneme havuzu, sınav ve teslim kayıtlarının ortak tipleri. */
 
-export type Sik = "A" | "B" | "C" | "D";
+export type Sik = "A" | "B" | "C" | "D" | "E";
 
-export const SIKLAR: Sik[] = ["A", "B", "C", "D"];
+export const SIKLAR: Sik[] = ["A", "B", "C", "D", "E"];
 
 export type Kutu = { x: number; y: number; w: number; h: number };
 
@@ -90,6 +90,8 @@ export type Deneme = {
   sorular: SecilenSoru[];
   yayin: boolean;
   olusturma: number;
+  /** LGS ve ortaokul 4, TYT/AYT 5 şık. Eski kayıtlarda yok → 4. */
+  sikSayisi?: 4 | 5;
 };
 
 export type DersSonuc = {

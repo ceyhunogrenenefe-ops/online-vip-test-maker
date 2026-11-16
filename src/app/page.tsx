@@ -6,7 +6,7 @@ import { QuestionWorkspace } from "@/components/home/QuestionWorkspace";
 import { CropWorkspace } from "@/components/crop/CropWorkspace";
 import { QuestionEditor } from "@/components/editor/QuestionEditor";
 import { OnlineExamsPanel } from "@/components/online/OnlineExamsPanel";
-import { DenemePaneli } from "@/components/deneme/DenemePaneli";
+import { DenemeStudyo } from "@/components/deneme/DenemeStudyo";
 import { FoyWorkspace } from "@/components/foy/FoyWorkspace";
 import { TestProjectsBar } from "@/components/layout/TestProjectsBar";
 import { useEffect, useState } from "react";
@@ -28,7 +28,7 @@ export default function HomePage() {
       case "online":
         return <OnlineExamsPanel />;
       case "deneme":
-        return <DenemePaneli />;
+        return <DenemeStudyo />;
       case "foy":
         return <FoyWorkspace />;
       default:

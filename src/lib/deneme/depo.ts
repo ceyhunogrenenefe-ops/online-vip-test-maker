@@ -138,3 +138,47 @@ export function depoIsle<T>(fn: (depo: DepoDosya) => T): Promise<T> {
     throw son;
   });
 }
+
+/**
+ * Online sınav soru görselleri depo JSON'una gömülmez; her biri ayrı dosyadır.
+ * Böylece her cevap kaydında yüzlerce görsel yeniden yazılmaz.
+ */
+const GORSEL_ID = /^[a-f0-9-]{36}$/;
+
+function gorselYol(id: string) {
+  return join(dirname(yol()), "gorsel", `${id}.jpg`);
+}
+
+export async function gorselKaydet(id: string, veri: Uint8Array): Promise<void> {
+  if (!GORSEL_ID.test(id)) throw new Error("Geçersiz görsel kimliği.");
+  if (blobMu()) {
+    const { put } = await import("@vercel/blob");
+    await put(`deneme/gorsel/${id}.jpg`, Buffer.from(veri), {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "image/jpeg",
+    });
+    return;
+  }
+  if (process.env.VERCEL) throw new Error("Kalıcı sınav deposu bağlı değil.");
+  const p = gorselYol(id);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, veri);
+}
+
+export async function gorselGetir(id: string): Promise<Uint8Array | null> {
+  if (!GORSEL_ID.test(id)) return null;
+  if (blobMu()) {
+    const { get } = await import("@vercel/blob");
+    try {
+      const r = await get(`deneme/gorsel/${id}.jpg`, { access: "private" });
+      if (!r || r.statusCode !== 200 || !r.stream) return null;
+      return new Uint8Array(await new Response(r.stream).arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+  const p = gorselYol(id);
+  return existsSync(p) ? new Uint8Array(readFileSync(p)) : null;
+}

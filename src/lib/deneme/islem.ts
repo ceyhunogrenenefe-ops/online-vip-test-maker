@@ -40,11 +40,16 @@ function kodUret(varOlan: Set<string>): string {
 }
 
 function sikMi(v: unknown): v is Sik {
-  return v === "A" || v === "B" || v === "C" || v === "D";
+  return v === "A" || v === "B" || v === "C" || v === "D" || v === "E";
 }
+
+export const GORSEL_YOLU = "/api/deneme/sinav/gorsel?id=";
 
 function gorselTemiz(v: unknown): string | null {
   if (v == null || v === "") return null;
+  if (typeof v === "string" && v.startsWith(GORSEL_YOLU) && /^[a-f0-9-]{36}$/.test(v.slice(GORSEL_YOLU.length))) {
+    return v;
+  }
   if (typeof v !== "string" || !v.startsWith("data:image/")) {
     throw new DenemeHatasi("Soru görseli okunamadı.");
   }
@@ -349,6 +354,7 @@ function sinavGovde(deneme: Deneme, sorular: Soru[], onizleme: boolean) {
       id: deneme.id,
       kod: deneme.kod,
       ad: deneme.ad,
+      sikSayisi: deneme.sikSayisi ?? 4,
       smsAlici: deneme.smsAlici,
       bolumler: deneme.bolumler.map((b) => ({
         id: b.id,
@@ -583,4 +589,82 @@ export async function sonucListesi(denemeId: string) {
       sms: o.sms,
     }));
   return { deneme, oturumlar };
+}
+
+export type HazirSoru = {
+  ders: string;
+  bolumId: string;
+  dogru: Sik;
+  gorsel: string;
+  ortakGorsel: string | null;
+  grupId: string | null;
+};
+
+/**
+ * Deneme stüdyosunda (tarayıcıda) hazırlanmış denemeyi tek seferde kaydedip
+ * yayımlar. Görseller önceden `gorsel` işlemiyle yüklenmiş olmalı.
+ */
+export async function hazirDenemeYayinla(girdi: {
+  ad: string;
+  yanlisCezasi?: number;
+  smsAlici?: "ogrenci" | "veli";
+  sikSayisi?: number;
+  bolumler: Bolum[];
+  sorular: HazirSoru[];
+}) {
+  const ad = girdi.ad?.trim();
+  if (!ad) throw new DenemeHatasi("Deneme adı gerekli.");
+  const bolumler = bolumTemiz(girdi.bolumler);
+  const bolumIdler = new Set(bolumler.map((b) => b.id));
+  const liste = girdi.sorular || [];
+  if (!liste.length) throw new DenemeHatasi("Denemede soru yok.");
+  const sikSayisi = girdi.sikSayisi === 5 ? 5 : 4;
+  const pdfId = "studyo";
+  const kayitlar: Soru[] = liste.map((h, i) => {
+    if (!sikMi(h.dogru) || (sikSayisi === 4 && h.dogru === "E")) {
+      throw new DenemeHatasi(`${i + 1}. sorunun doğru cevabı eksik.`);
+    }
+    if (!bolumIdler.has(h.bolumId)) throw new DenemeHatasi("Soru bölümü bulunamadı.");
+    const gorsel = gorselTemiz(h.gorsel);
+    if (!gorsel) throw new DenemeHatasi(`${i + 1}. sorunun görseli eksik.`);
+    return {
+      yerelId: id(),
+      ders: String(h.ders || "").trim() || "Ders",
+      sayfa: 1,
+      numara: i + 1,
+      metin: "",
+      secenekler: {},
+      dogru: h.dogru,
+      grupId: h.grupId ? String(h.grupId) : null,
+      ortakMetin: null,
+      guven: 100,
+      inceleme: false,
+      incelemeNeden: null,
+      matematikVar: false,
+      kutu: { x: 0, y: 0, w: 0, h: 0 },
+      ortakKutu: null,
+      id: id(),
+      pdfId,
+      gorsel,
+      ortakGorsel: gorselTemiz(h.ortakGorsel),
+    };
+  });
+  return depoIsle((depo) => {
+    const deneme: Deneme = {
+      id: id(),
+      kod: kodUret(new Set(depo.denemeler.map((d) => d.kod))),
+      ad,
+      yanlisCezasi: cezaTemiz(girdi.yanlisCezasi),
+      smsAlici: girdi.smsAlici === "ogrenci" ? "ogrenci" : "veli",
+      bolumler,
+      pdfIdler: [pdfId],
+      sorular: kayitlar.map((k, i) => ({ soruId: k.id, bolumId: liste[i].bolumId, ders: k.ders, sira: i + 1 })),
+      yayin: true,
+      olusturma: Date.now(),
+      sikSayisi,
+    };
+    depo.sorular.push(...kayitlar);
+    depo.denemeler.unshift(deneme);
+    return { id: deneme.id, kod: deneme.kod };
+  });
 }
