@@ -42,7 +42,7 @@ export function QuestionPanel({
   const smartPlacement = useAppStore((s) => s.paperSettings.smartPlacement);
   const [dragId, setDragId] = useState<string | null>(null);
 
-  const canReorder = !smartPlacement;
+  const canReorder = true;
 
   const persistOrder = useCallback(
     (ids: string[]) => {
@@ -97,7 +97,7 @@ export function QuestionPanel({
         {smartPlacement ? (
           <span className="flex items-center gap-1 text-[10px] text-amber-700">
             <Lock size={11} />
-            PDF sırası otomatik (tasarruflu)
+            Akıllı yerleşim: sıra korunur, boşluk dolar
           </span>
         ) : (
           <span className="text-[10px] text-slate-500">

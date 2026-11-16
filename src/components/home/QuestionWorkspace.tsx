@@ -46,7 +46,7 @@ export function QuestionWorkspace() {
       })
       .catch((e) => setEkranHata(ekranHatasi(e)));
   };
-  const canReorder = !smartPlacement;
+  const canReorder = true;
 
   const persistOrder = useCallback(
     (ids: string[]) => {
@@ -186,7 +186,7 @@ export function QuestionWorkspace() {
                 </h2>
                 <p className="text-xs text-slate-500">
                   {smartPlacement
-                    ? "Akıllı yerleşim açık — PDF sırası otomatik"
+                    ? "Akıllı yerleşim açık — sıra aynı kalır, sütundaki boşluk dolar"
                     : "Sürükleyerek sırayı değiştirin (PDF aynı sırayı kullanır)"}
                 </p>
               </div>

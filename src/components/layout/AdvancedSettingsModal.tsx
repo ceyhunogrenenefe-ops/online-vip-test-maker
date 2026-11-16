@@ -58,11 +58,11 @@ export function AdvancedSettingsModal({ onClose }: Props) {
                 setPaperSettings({ smartPlacement: e.target.checked })
               }
             />
-            Akıllı soru yerleşimi (tasarruflu PDF)
+            Akıllı soru yerleşimi
           </label>
           <p className="text-xs text-slate-500 -mt-2 ml-6">
-            Açıkken PDF soru sırasını otomatik optimize eder. Kapalıyken panelde
-            sürükleyerek sırayı siz belirlersiniz.
+            Soru sırası değişmez. Sütuna sığan soru orada kalır, sığmayan küçülür.
+            Çok uzun soru sayfa genişliğine geçer; sütun dibinde boşluk kalmaz.
           </p>
 
           <div className="rounded-lg border border-slate-200 p-3 space-y-3">
