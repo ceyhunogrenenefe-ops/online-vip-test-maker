@@ -156,7 +156,6 @@ function bitir(taslak: Taslak, sira: number): AyiklananSoru {
 
   const neden: string[] = [];
   if (!taslak.numara) neden.push("Soru numarası bulunamadı");
-  if (sikSayisi < 4) neden.push("Seçenekler eksik");
   if (!taslak.ders || taslak.ders === "Belirsiz") neden.push("Ders belirlenemedi");
   if (taslak.ocr && matematikVar) {
     neden.push("Matematik ifadesi, grafik veya şekil OCR ile güvenilir değil; görseli kontrol edin");
@@ -211,21 +210,35 @@ function anahtariUygula(
   }
 }
 
-function kutulariGenislet(sorular: AyiklananSoru[]) {
+function kutulariGenislet(sorular: AyiklananSoru[], sayfalar: SayfaGirdi[], basliklar: { sayfa: number; y: number }[]) {
+  for (const s of sorular) {
+    const sayfa = sayfalar.find((p) => p.sayfa === s.sayfa);
+    const gen = sayfa?.genislik ?? 595;
+    const iki = sorular.some((q) => q.sayfa === s.sayfa && q.kutu.x > gen * 0.42);
+    if (!iki) continue;
+    if (s.kutu.x > gen * 0.42) {
+      s.kutu.x = gen / 2 - 6;
+      s.kutu.w = gen / 2 - 22;
+    } else {
+      s.kutu.x = 24;
+      s.kutu.w = gen / 2 - 30;
+    }
+  }
   for (let i = 0; i < sorular.length; i++) {
     const s = sorular[i];
-    const sonraki = sorular.slice(i + 1).find((n) => n.sayfa === s.sayfa && Math.abs(n.kutu.x - s.kutu.x) < 120);
-    if (sonraki && sonraki.kutu.y > s.kutu.y + s.kutu.h) {
-      s.kutu.h = sonraki.kutu.y - 4 - s.kutu.y;
-    }
-    if (s.ortakKutu && sonraki === undefined) {
-      /* son soruda şekil payı: kutuyu biraz uzat */
-    }
+    const sayfa = sayfalar.find((p) => p.sayfa === s.sayfa);
+    const yuk = sayfa?.yukseklik ?? 842;
+    const sonraki = sorular
+      .slice(i + 1)
+      .find((n) => n.sayfa === s.sayfa && Math.abs(n.kutu.x - s.kutu.x) < 80 && n.kutu.y > s.kutu.y);
+    const baslik = basliklar
+      .filter((b) => b.sayfa === s.sayfa && b.y > s.kutu.y + 8)
+      .sort((a, b) => a.y - b.y)[0];
+    let alt = sonraki ? sonraki.kutu.y - 4 : yuk - 28;
+    if (baslik) alt = Math.min(alt, baslik.y - 4);
+    if (alt > s.kutu.y + 24) s.kutu.h = alt - s.kutu.y;
     if (s.ortakKutu && s.ortakKutu.y + s.ortakKutu.h < s.kutu.y) {
-      s.ortakKutu = {
-        ...s.ortakKutu,
-        h: s.kutu.y - 4 - s.ortakKutu.y,
-      };
+      s.ortakKutu = { ...s.ortakKutu, h: s.kutu.y - 4 - s.ortakKutu.y };
     }
   }
 }
@@ -251,6 +264,7 @@ export function ayikla(sayfalar: SayfaGirdi[]): AyiklananSoru[] {
   let taslak: Taslak | null = null;
   let grup: { id: string; bas: number; bit: number; satirlar: KonumSatir[] } | null = null;
   const tuketilen = new Set<KonumSatir>();
+  const basliklar: { sayfa: number; y: number }[] = [];
 
   const flush = () => {
     if (!taslak || !taslak.satirlar.length) {
@@ -307,6 +321,23 @@ export function ayikla(sayfalar: SayfaGirdi[]): AyiklananSoru[] {
       flush();
       ders = baslik;
       grup = null;
+      basliklar.push({ sayfa: satir.sayfa, y: satir.y });
+      tuketilen.add(satir);
+      continue;
+    }
+
+    if (/^\d{1,3}$/.test(satir.metin) && satir.x < 110) {
+      flush();
+      taslak = {
+        sayfa: satir.sayfa,
+        numara: Number(satir.metin),
+        ders,
+        ocr: satir.ocr,
+        satirlar: [],
+        grupId: null,
+        ortakMetin: null,
+        ortakSatirlar: [],
+      };
       tuketilen.add(satir);
       continue;
     }
@@ -391,7 +422,7 @@ export function ayikla(sayfalar: SayfaGirdi[]): AyiklananSoru[] {
   }
 
   anahtariUygula(sorular, harita, konuEtiketli, sirali);
-  kutulariGenislet(sorular);
+  kutulariGenislet(sorular, sayfalar, basliklar);
   return sorular;
 }
 

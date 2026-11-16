@@ -41,3 +41,31 @@ export function satirlaraBol(parcalar: Parca[]): MetinSatir[] {
   }
   return satirlar;
 }
+
+/**
+ * Deneme sayfası soldan aşağı, sonra sağ sütundan aşağı okunur.
+ * Tam genişlikteki ders başlığı sütunları böler.
+ */
+export function sinavSatirlari(parcalar: Parca[], genislik: number): MetinSatir[] {
+  const dolu = parcalar.filter((p) => p.metin.trim());
+  if (!dolu.length || genislik < 100) return satirlaraBol(dolu);
+  const span = dolu.filter((p) => p.w >= genislik * 0.55);
+  const dar = dolu.filter((p) => p.w < genislik * 0.55);
+  const sol = dar.filter((p) => p.x + p.w / 2 < genislik * 0.5);
+  const sag = dar.filter((p) => p.x + p.w / 2 >= genislik * 0.5);
+  if (sol.length < 4 || sag.length < 4) return satirlaraBol(dolu);
+
+  const bantlar = satirlaraBol(span);
+  const solSatir = satirlaraBol(sol);
+  const sagSatir = satirlaraBol(sag);
+  const noktalar = [Number.NEGATIVE_INFINITY, ...bantlar.map((b) => b.y), Number.POSITIVE_INFINITY];
+  const sonuc: MetinSatir[] = [];
+  for (let i = 0; i < noktalar.length - 1; i++) {
+    const y0 = noktalar[i];
+    const y1 = noktalar[i + 1];
+    if (i > 0) sonuc.push(bantlar[i - 1]);
+    const icinde = (s: MetinSatir) => s.y > y0 + 0.5 && s.y < y1 - 0.5;
+    sonuc.push(...solSatir.filter(icinde), ...sagSatir.filter(icinde));
+  }
+  return sonuc;
+}

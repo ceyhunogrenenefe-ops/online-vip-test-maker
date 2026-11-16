@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { anahtarOku, ayikla, cevaplariEsle } from "../deneme/ayikla.ts";
 import { karisikDenemePdf } from "../deneme/ornek-pdf.ts";
-import { satirlaraBol } from "../deneme/pdf-satir.ts";
+import { satirlaraBol, sinavSatirlari } from "../deneme/pdf-satir.ts";
 import { depoOku } from "../deneme/depo.ts";
 import {
   denemeOlustur,
@@ -186,6 +186,34 @@ test("aynı kök iki kez seçilmez, eksik ders sayılır", () => {
     ["p1"]
   );
   assert.equal(kesik.sorular.length, 2);
+});
+
+test("iki sütun ayrı soru diye kesilir", () => {
+  const satirlar = sinavSatirlari(
+    [
+      { metin: "TÜRKÇE", x: 40, y: 30, w: 400, h: 14 },
+      { metin: "1.", x: 36, y: 70, w: 14, h: 12 },
+      { metin: "Ali okula yürür.", x: 54, y: 70, w: 160, h: 12 },
+      { metin: "A) Koşarak", x: 54, y: 92, w: 90, h: 12 },
+      { metin: "B) Yürüyerek", x: 54, y: 110, w: 100, h: 12 },
+      { metin: "C) Servisle", x: 54, y: 128, w: 90, h: 12 },
+      { metin: "D) Bisikletle", x: 54, y: 146, w: 100, h: 12 },
+      { metin: "2.", x: 320, y: 70, w: 14, h: 12 },
+      { metin: "Hava güneşlidir.", x: 338, y: 70, w: 150, h: 12 },
+      { metin: "A) Evet", x: 338, y: 92, w: 70, h: 12 },
+      { metin: "B) Hayır", x: 338, y: 110, w: 70, h: 12 },
+      { metin: "C) Belki", x: 338, y: 128, w: 70, h: 12 },
+      { metin: "D) Asla", x: 338, y: 146, w: 70, h: 12 },
+    ],
+    595
+  );
+  const sorular = ayikla([{ sayfa: 1, genislik: 595, yukseklik: 400, ocr: false, satirlar }]).filter((s) => s.numara);
+  assert.equal(sorular.length, 2);
+  assert.equal(sorular[0].numara, 1);
+  assert.match(sorular[0].metin, /Ali/);
+  assert.doesNotMatch(sorular[0].metin, /Hava/);
+  assert.equal(sorular[1].numara, 2);
+  assert.ok(sorular[0].kutu.x + sorular[0].kutu.w <= sorular[1].kutu.x + 10);
 });
 
 test("yüklenen cevap anahtarı ders ve numarayla eşleşir", () => {
