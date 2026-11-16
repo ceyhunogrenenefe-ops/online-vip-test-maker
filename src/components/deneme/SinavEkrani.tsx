@@ -244,8 +244,8 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
           </button>
         </form>
       ) : (
-        <div className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[1fr_280px]">
-          <div className="space-y-4">
+        <div className="mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)] gap-2 p-2 sm:gap-4 sm:p-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="col-start-2 row-start-1 space-y-4">
             {sinav.deneme.bolumler.map((bolum) => {
               const grup = sinav.sorular.filter((s) => s.bolumId === bolum.id);
               if (!grup.length) return null;
@@ -261,7 +261,7 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
                       if (soru.grupId) gorulen.add(soru.grupId);
                       const kars = karsilastirma.find((k) => k.soruId === soru.id);
                       return (
-                        <article key={soru.id} id={`soru-${soru.sira}`} className="rounded-xl bg-white p-4 shadow">
+                        <article key={soru.id} id={`soru-${soru.sira}`} className="scroll-mt-2 rounded-xl bg-white p-2 shadow sm:p-4">
                           {ortak && (soru.ortakMetin || soru.ortakGorsel) ? (
                             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                               {soru.ortakGorsel ? (
@@ -276,7 +276,9 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
                           </p>
                           {soru.gorsel ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={soru.gorsel} alt={`Soru ${soru.sira}`} className="mt-2 max-h-[75vh] max-w-full rounded border bg-white object-contain" />
+                            <a href={soru.gorsel} target="_blank" rel="noreferrer" title="Büyütmek için dokun">
+                              <img src={soru.gorsel} alt={`Soru ${soru.sira}`} className="mt-2 w-full max-w-2xl rounded border bg-white object-contain" />
+                            </a>
                           ) : null}
                           {soru.metin ? <p className="mt-2 font-medium">{soru.metin}</p> : null}
                           {HARFLER.some((h) => soru.secenekler[h] && soru.secenekler[h] !== h) ? (
@@ -304,13 +306,14 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
             })}
           </div>
 
-          <aside className="h-fit rounded-xl bg-white p-3 shadow lg:sticky lg:top-4">
-            <h2 className="text-sm font-bold text-dershanem-navy">Optik form</h2>
-            <p className="mb-2 text-xs text-slate-500">{ad} {soyad}</p>
-            <ol className="max-h-[60vh] space-y-1 overflow-y-auto">
+          {/* Telefonda da solda sabit dursun: öğrenci soruyu okurken optiği kaydırmadan işaretler. */}
+          <aside className="sticky top-2 col-start-1 row-start-1 flex max-h-[calc(100dvh-1rem)] flex-col rounded-xl bg-white p-1.5 shadow sm:top-4 sm:p-3">
+            <h2 className="text-center text-[11px] font-bold text-dershanem-navy sm:text-left sm:text-sm">Optik form</h2>
+            <p className="mb-2 hidden text-xs text-slate-500 sm:block">{ad} {soyad}</p>
+            <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto">
               {sinav.sorular.map((soru) => (
-                <li key={soru.id} className="flex items-center gap-2">
-                  <a href={`#soru-${soru.sira}`} className="w-6 text-xs font-semibold text-slate-600">
+                <li key={soru.id} className="flex items-center gap-0.5 sm:gap-2">
+                  <a href={`#soru-${soru.sira}`} className="w-5 shrink-0 text-right text-[10px] font-semibold text-slate-600 sm:w-6 sm:text-xs">
                     {soru.sira}
                   </a>
                   {HARFLER.map((h) => (
@@ -321,7 +324,7 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
                       aria-pressed={cevaplar[soru.id] === h}
                       disabled={Boolean(sonuc) || Boolean(onizlemeId)}
                       onClick={() => isaretle(soru.id, h)}
-                      className={`h-8 w-8 rounded-full border text-xs font-bold ${
+                      className={`h-6 w-6 shrink-0 rounded-full border text-[10px] font-bold sm:h-8 sm:w-8 sm:text-xs ${
                         cevaplar[soru.id] === h ? "border-dershanem-navy bg-dershanem-navy text-white" : "bg-white"
                       }`}
                     >
@@ -338,7 +341,7 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
                 type="button"
                 disabled={gonderiliyor}
                 onClick={() => (sonuc ? void teslimEt(false) : setOnay(true))}
-                className="mt-3 w-full rounded-lg bg-dershanem-blue py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="mt-2 w-full rounded-lg bg-dershanem-blue py-2 text-xs font-semibold text-white disabled:opacity-60 sm:mt-3 sm:text-sm"
               >
                 Sınavı Bitir
               </button>

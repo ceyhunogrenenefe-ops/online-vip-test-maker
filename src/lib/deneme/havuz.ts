@@ -52,7 +52,15 @@ export type DenemeTaslak = {
   secim: Record<string, string[]>;
   olusturma: number;
   yayin: { id: string; kod: string } | null;
+  /** Basılı kitapçık ayarları. Kapak görseli `img:kapak:<id>`, logo `img:logo` anahtarında. */
+  kitap?: { kurum: string; denemeNo: string; sinavAdi: string; kitapcikTuru: string; kapak: boolean };
 };
+
+/** Öğrenciye verilen link. NEXT_PUBLIC_SINAV_ADRES tanımlıysa (ör. özel alan adı) o kullanılır. */
+export function sinavLinki(kod: string) {
+  const taban = process.env.NEXT_PUBLIC_SINAV_ADRES || (typeof window !== "undefined" ? window.location.origin : "");
+  return `${taban.replace(/\/$/, "")}/sinav/${kod}`;
+}
 
 const depo = typeof indexedDB === "undefined" ? undefined : createStore("deneme-studyo", "kv");
 

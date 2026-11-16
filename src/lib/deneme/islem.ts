@@ -582,6 +582,8 @@ export async function sonucListesi(denemeId: string) {
       ad: o.ad,
       soyad: o.soyad,
       telefonMaske: o.telefon ? telefonMaske(o.telefon) : "",
+      // Yalnız giriş yapmış öğretmenin gördüğü liste; tam numara gerekli.
+      telefon: o.telefon || "",
       telefonKaynak: o.telefonKaynak,
       teslim: o.teslim,
       teslimZamani: o.teslimZamani,

@@ -10,7 +10,7 @@ import { openPdfDocument } from "../pdf-document";
 import type { Kelime, SayfaVeri } from "./kesim";
 import type { Kutu } from "./model";
 import { anahtarSayfasiMi } from "./anahtar";
-import { bolmeBul, icerikSiniri, kenarNumaralari } from "./piksel";
+import { bolmeBul, boslukSonrasiniAt, icerikSiniri, kenarNumaralari } from "./piksel";
 
 export type OkunanSayfa = SayfaVeri & {
   gorsel: Blob;
@@ -328,7 +328,17 @@ export async function kutuKes(
     if (koyu > h * 0.6) for (let y = 0; y < h; y++) veri.fill(255, (y * w + x) * 4, (y * w + x) * 4 + 3);
   }
   ctx.putImageData(resim, 0, 0);
-  const sinir = icerikSiniri(w, h, (px, py) => {
+  // 22 mm'den uzun boşluktan sonrası soruya ait değildir (sayfa altlığı, logo).
+  const satirDolu = (py: number) => {
+    let n = 0;
+    for (let px = 0; px < w; px += 2) {
+      const i = (py * w + px) * 4;
+      if (veri[i] + veri[i + 1] + veri[i + 2] <= 690 && ++n > 1) return true;
+    }
+    return false;
+  };
+  const kesH = boslukSonrasiniAt(h, satirDolu, Math.round((22 / 25.4) * 72 * olcek));
+  const sinir = icerikSiniri(w, kesH, (px, py) => {
     const i = (py * w + px) * 4;
     return veri[i] + veri[i + 1] + veri[i + 2] > 690;
   }, Math.round(4 * olcek));

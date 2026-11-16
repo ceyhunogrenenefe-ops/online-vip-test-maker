@@ -249,3 +249,11 @@ test("anahtar sayfası: karekod notu anahtar sayılmaz", () => {
   for (let i = 1; i <= 10; i++) k.push(...yaz(40, 50 + i * 15, `${i}. B`));
   assert.equal(anahtarSayfasiMi(k), true);
 });
+
+import { boslukSonrasiniAt } from "../deneme/piksel.ts";
+
+test("uzun boşluktan sonraki altlık atılır", () => {
+  const dolu = (y: number) => (y >= 10 && y < 50) || (y >= 200 && y < 210);
+  assert.equal(boslukSonrasiniAt(220, dolu, 60), 50);
+  assert.equal(boslukSonrasiniAt(220, (y) => y < 100 || (y > 130 && y < 150), 60), 150, "kısa iç boşluk korunur");
+});
