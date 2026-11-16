@@ -20,6 +20,7 @@ interface AppState {
     | "editor"
     | "online"
     | "foy"
+    | "deneme"
     | "advanced";
   currentProjectId: string | null;
   projects: TestProjectSummary[];

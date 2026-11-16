@@ -6,6 +6,7 @@ import { QuestionWorkspace } from "@/components/home/QuestionWorkspace";
 import { CropWorkspace } from "@/components/crop/CropWorkspace";
 import { QuestionEditor } from "@/components/editor/QuestionEditor";
 import { OnlineExamsPanel } from "@/components/online/OnlineExamsPanel";
+import { DenemePaneli } from "@/components/deneme/DenemePaneli";
 import { FoyWorkspace } from "@/components/foy/FoyWorkspace";
 import { TestProjectsBar } from "@/components/layout/TestProjectsBar";
 import { useEffect, useState } from "react";
@@ -26,6 +27,8 @@ export default function HomePage() {
         return <QuestionEditor />;
       case "online":
         return <OnlineExamsPanel />;
+      case "deneme":
+        return <DenemePaneli />;
       case "foy":
         return <FoyWorkspace />;
       default:
@@ -37,7 +40,7 @@ export default function HomePage() {
     <div className="flex h-dvh flex-col overflow-hidden">
       <Header />
       <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
-        {activeView === "foy" ? null : (
+        {activeView === "foy" || activeView === "deneme" ? null : (
           <button
             type="button"
             className="relative z-40 shrink-0 border-b bg-white px-3 py-2 text-left text-sm font-semibold text-[#173b70] md:hidden"
@@ -47,7 +50,7 @@ export default function HomePage() {
           </button>
         )}
         <div className="relative flex min-h-0 flex-1 flex-col md:contents">
-        {activeView === "foy" ? null : (
+        {activeView === "foy" || activeView === "deneme" ? null : (
           <>
             {kagitAcik ? (
               <button
@@ -65,7 +68,7 @@ export default function HomePage() {
           </>
         )}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-100">
-          {activeView === "foy" ? null : <TestProjectsBar />}
+          {activeView === "foy" || activeView === "deneme" ? null : <TestProjectsBar />}
           {mainContent()}
         </main>
         </div>
