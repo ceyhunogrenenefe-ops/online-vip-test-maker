@@ -49,6 +49,8 @@ export function koclukGirisAdresi(): string {
 export function herkeseAcikYol(pathname: string): boolean {
   if (pathname === "/giris" || pathname.startsWith("/giris/")) return true;
   if (pathname === "/exam" || pathname.startsWith("/exam/")) return true;
+  if (pathname === "/sinav" || pathname.startsWith("/sinav/")) return true;
+  if (pathname === "/api/deneme/sinav" || pathname.startsWith("/api/deneme/sinav/")) return true;
   if (pathname === "/api/giris" || pathname === "/api/cikis") return true;
   return false;
 }

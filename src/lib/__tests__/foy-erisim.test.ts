@@ -20,6 +20,9 @@ test("koclukta ogretmen ve koc girebilir, ogrenci giremez", () => {
 
 test("ogrenci sinav linki kapinin disinda kalir", () => {
   assert.equal(herkeseAcikYol("/exam/abc"), true);
+  assert.equal(herkeseAcikYol("/sinav/abc"), true);
+  assert.equal(herkeseAcikYol("/api/deneme/sinav"), true);
+  assert.equal(herkeseAcikYol("/api/deneme"), false);
   assert.equal(herkeseAcikYol("/giris"), true);
   assert.equal(herkeseAcikYol("/api/giris"), true);
   assert.equal(herkeseAcikYol("/"), false);

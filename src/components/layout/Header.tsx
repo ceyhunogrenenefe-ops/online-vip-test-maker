@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ClipboardList,
   FileText,
   Home,
   Building2,
@@ -15,7 +16,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 
 const navItems: {
-  id: "home" | "crop" | "editor" | "online" | "foy";
+  id: "home" | "crop" | "editor" | "online" | "deneme" | "foy";
   label: string;
   icon: React.ElementType;
 }[] = [
@@ -23,6 +24,7 @@ const navItems: {
   { id: "crop", label: "Kırpma Aracı", icon: Crop },
   { id: "editor", label: "Soru Editörü", icon: Pencil },
   { id: "online", label: "Online Testlerim", icon: Globe },
+  { id: "deneme", label: "Deneme", icon: ClipboardList },
   { id: "foy", label: "Föy Oluştur", icon: FileText },
 ];
 
