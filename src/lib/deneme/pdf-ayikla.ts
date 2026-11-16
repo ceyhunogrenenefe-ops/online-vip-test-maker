@@ -153,3 +153,25 @@ export async function pdfdenAyikla(
   });
   return { sayfaSayisi: doc.numPages, sorular };
 }
+
+/** Cevap anahtarı PDF’indeki yazıyı düz metin olarak okur. */
+export async function pdfDuzMetin(file: File): Promise<string> {
+  const doc = await openPdfDocument(file);
+  const satirlar: string[] = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const icerik = await page.getTextContent();
+    const parca: string[] = [];
+    let y = -1;
+    for (const item of icerik.items) {
+      if (!("str" in item) || !item.str.trim()) continue;
+      const satirY = Math.round(item.transform[5]);
+      if (y >= 0 && Math.abs(satirY - y) > 4) parca.push("\n");
+      else if (parca.length) parca.push(" ");
+      parca.push(item.str.trim());
+      y = satirY;
+    }
+    satirlar.push(parca.join(""));
+  }
+  return satirlar.join("\n");
+}

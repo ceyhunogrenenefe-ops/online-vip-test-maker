@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { ayikla } from "../deneme/ayikla.ts";
+import { anahtarOku, ayikla, cevaplariEsle } from "../deneme/ayikla.ts";
 import { karisikDenemePdf } from "../deneme/ornek-pdf.ts";
 import { satirlaraBol } from "../deneme/pdf-satir.ts";
 import { depoOku } from "../deneme/depo.ts";
@@ -186,6 +186,32 @@ test("aynı kök iki kez seçilmez, eksik ders sayılır", () => {
     ["p1"]
   );
   assert.equal(kesik.sorular.length, 2);
+});
+
+test("yüklenen cevap anahtarı ders ve numarayla eşleşir", () => {
+  const kayit = anahtarOku(`TÜRKÇE
+BAC
+MATEMATİK
+1-C
+2B`);
+  assert.deepEqual(
+    kayit.map((k) => `${k.ders}:${k.no}${k.sik}`),
+    ["Türkçe:1B", "Türkçe:2A", "Türkçe:3C", "Matematik:1C", "Matematik:2B"]
+  );
+  const eslesen = cevaplariEsle(
+    [
+      { id: "t1", ders: "Türkçe", numara: 1 },
+      { id: "t2", ders: "Türkçe", numara: 2 },
+      { id: "m1", ders: "Matematik", numara: 1 },
+      { id: "f1", ders: "Fen Bilimleri", numara: 1 },
+    ],
+    kayit
+  );
+  assert.deepEqual(eslesen, [
+    { id: "t1", dogru: "B" },
+    { id: "t2", dogru: "A" },
+    { id: "m1", dogru: "C" },
+  ]);
 });
 
 test("net yanlış cezasını ders ders uygular", () => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DenemeKirp, type KesikSoru } from "@/components/deneme/DenemeKirp";
+import { pdfdenAyikla, pdfDuzMetin } from "@/lib/deneme/pdf-ayikla";
 import { lgsBolumleri } from "@/lib/deneme/sablon";
 import { DERS_ADLARI, SIKLAR, VARSAYILAN_CEZA } from "@/lib/deneme/model";
 import type { AyiklananSoru, Bolum, DersSonuc, EksikDers, PdfKayit, SecilenSoru, Sik, Soru } from "@/lib/deneme/model";
@@ -63,6 +64,9 @@ export function DenemePaneli() {
   const [durum, setDurum] = useState("");
   const [hata, setHata] = useState("");
   const [yeniDers, setYeniDers] = useState<string>(DERS_ADLARI[0]);
+  const [anahtar, setAnahtar] = useState("");
+  const [anahtarPdf, setAnahtarPdf] = useState("");
+  const [kesiyor, setKesiyor] = useState(false);
   const pdfKimlik = useRef<{ ad: string; id: string } | null>(null);
 
   const yenile = async () => {
@@ -113,6 +117,86 @@ export function DenemePaneli() {
     setSeciliPdf((v) => (v.includes(pdfId) ? v : [...v, pdfId]));
     await yenile();
     setDurum(`${kesik.ders} sorusu havuza girdi. Denemeyi bu PDF’ten oluşturabilirsiniz.`);
+  };
+
+  const otomatikKes = async (file: File) => {
+    setHata("");
+    setKesiyor(true);
+    try {
+      const ayik = await pdfdenAyikla(file, setDurum);
+      const hazir = ayik.sorular.filter((s) => s.soru.numara);
+      const belirsiz = ayik.sorular.length - hazir.length;
+      if (!hazir.length) {
+        setHata("Sorular otomatik ayrılamadı. Alttan elle kesin.");
+        return;
+      }
+      let pdfId = "";
+      for (let i = 0; i < hazir.length; i += 3) {
+        const dilim = hazir.slice(i, i + 3).map(({ soru, gorsel, ortakGorsel }) => ({
+          soru: { ...soru, dogru: null },
+          gorsel,
+          ortakGorsel,
+        }));
+        setDurum(`${file.name}: ${Math.min(i + 3, hazir.length)}/${hazir.length} soru kaydediliyor`);
+        if (!pdfId) {
+          const kayit = await api<{ pdfId: string }>("", {
+            op: "pdf",
+            ad: file.name,
+            sayfaSayisi: ayik.sayfaSayisi,
+            sorular: dilim,
+          });
+          pdfId = kayit.pdfId;
+        } else {
+          await api("", { op: "pdf-ek", pdfId, sorular: dilim });
+        }
+      }
+      pdfKimlik.current = { ad: file.name, id: pdfId };
+      setAnahtarPdf(pdfId);
+      setSeciliPdf((v) => (v.includes(pdfId) ? v : [...v, pdfId]));
+      await yenile();
+      setDurum(
+        `${hazir.length} soru kesildi.${belirsiz ? ` ${belirsiz} kesit ayrılamadı.` : ""} Cevap anahtarını yükleyip eşleştirin.`
+      );
+    } catch (e) {
+      setHata(e instanceof Error ? e.message : "Sorular kesilemedi.");
+    } finally {
+      setKesiyor(false);
+    }
+  };
+
+  const anahtarYukle = async (file: File) => {
+    setHata("");
+    try {
+      const pdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      const metin = pdf ? await pdfDuzMetin(file) : await file.text();
+      if (metin.replace(/\s/g, "").length < 2) {
+        setHata("Bu dosyada okunacak cevap yok. Metni kutuya yapıştırın.");
+        return;
+      }
+      setAnahtar(metin);
+      setDurum("Cevap anahtarı okundu. Eşleştir’e basın.");
+    } catch (e) {
+      setHata(e instanceof Error ? e.message : "Cevap dosyası okunamadı.");
+    }
+  };
+
+  const eslestir = async () => {
+    if (!anahtarPdf) {
+      setHata("Önce soruları kesin.");
+      return;
+    }
+    setHata("");
+    try {
+      const sonuc = await api<{ eslesen: number; eslesmeyen: number }>("", {
+        op: "anahtar",
+        pdfId: anahtarPdf,
+        metin: anahtar,
+      });
+      await yenile();
+      setDurum(`${sonuc.eslesen} cevap eşleşti.${sonuc.eslesmeyen ? ` ${sonuc.eslesmeyen} soru anahtarda yok.` : ""}`);
+    } catch (e) {
+      setHata(e instanceof Error ? e.message : "Cevaplar eşleşmedi.");
+    }
   };
 
   const soruKaydet = async (soru: Soru) => {
@@ -216,8 +300,67 @@ export function DenemePaneli() {
       <section className="rounded-xl bg-white p-4 shadow">
         <h2 className="text-lg font-bold text-dershanem-navy">PDF’den soru kes</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Soruyu sayfadan kesin. Şıklar ve şekil karenin içinde kalsın. Kestiğiniz görsel olduğu gibi öğrenci ekranına yerleşir.
+          Sorular sayfadan otomatik kesilir. Cevapları siz yüklersiniz; ders ve soru numarasıyla eşleşir.
         </p>
+        <label className="mt-3 inline-flex cursor-pointer rounded-lg bg-dershanem-blue px-4 py-2 text-sm font-medium text-white">
+          {kesiyor ? "Kesiliyor" : "Soruları otomatik kes"}
+          <input
+            type="file"
+            accept="application/pdf"
+            className="sr-only"
+            disabled={kesiyor}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void otomatikKes(f);
+            }}
+          />
+        </label>
+        <div className="mt-4 rounded-lg border p-3">
+          <h3 className="text-sm font-bold text-dershanem-navy">Cevap anahtarı</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Ders adının altına şıkları yazın. Örnek: TÜRKÇE sonra BACD ya da 1-B 2-A. MATEMATİK numarası yeniden 1’den başlar.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select
+              className="rounded border px-2 py-1 text-sm"
+              value={anahtarPdf}
+              onChange={(e) => setAnahtarPdf(e.target.value)}
+            >
+              <option value="">Kesilen PDF</option>
+              {pdfler.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.ad}
+                </option>
+              ))}
+            </select>
+            <label className="cursor-pointer rounded border px-2 py-1 text-sm">
+              Anahtar dosyası
+              <input
+                type="file"
+                accept="application/pdf,text/plain,.txt"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) void anahtarYukle(f);
+                }}
+              />
+            </label>
+          </div>
+          <textarea
+            className="mt-2 w-full rounded border px-2 py-1 text-sm"
+            rows={5}
+            placeholder={"TÜRKÇE\nBACD\nMATEMATİK\n1-C 2-B"}
+            value={anahtar}
+            onChange={(e) => setAnahtar(e.target.value)}
+          />
+          <button type="button" className="mt-2 rounded bg-dershanem-navy px-3 py-1 text-sm font-semibold text-white" onClick={() => void eslestir()}>
+            Cevapları eşleştir
+          </button>
+        </div>
+        <h3 className="mt-4 text-sm font-bold text-dershanem-navy">Elle kes</h3>
+        <p className="mt-1 text-xs text-slate-500">Otomatik kesemediği sorunun çevresini çizin.</p>
         <div className="mt-3">
           <DenemeKirp onYerles={yerlestir} />
         </div>

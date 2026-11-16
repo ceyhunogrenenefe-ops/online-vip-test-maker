@@ -6,6 +6,7 @@ import {
   denemeGuncelle,
   denemeOlustur,
   denemeYayinla,
+  cevapAnahtariUygula,
   havuzOku,
   onizlemeGetir,
   pdfEkle,
@@ -20,6 +21,7 @@ type Istek = {
   ad?: string;
   sayfaSayisi?: number;
   pdfId?: string;
+  metin?: string;
   id?: string;
   oturumId?: string;
   yanlisCezasi?: number;
@@ -89,6 +91,8 @@ export async function POST(req: Request) {
         return NextResponse.json(await denemeYayinla(body.id || ""));
       case "sms":
         return NextResponse.json(await smsYeniden(body.oturumId || ""));
+      case "anahtar":
+        return NextResponse.json(await cevapAnahtariUygula(body.pdfId || "", body.metin || ""));
       default:
         return NextResponse.json({ hata: "Bilinmeyen işlem." }, { status: 400 });
     }
