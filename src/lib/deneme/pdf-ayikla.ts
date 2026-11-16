@@ -49,6 +49,28 @@ function jpegSigdir(kaynak: HTMLCanvasElement): string {
   return tuval.toDataURL("image/jpeg", 0.5);
 }
 
+export function gorselSigdir(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth || img.width;
+      c.height = img.naturalHeight || img.height;
+      const ctx = c.getContext("2d");
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0);
+      resolve(jpegSigdir(c));
+    };
+    img.onerror = () => reject(new Error("Kesilen görsel okunamadı."));
+    img.src = dataUrl;
+  });
+}
+
 /**
  * Metin katmanı doluysa onu kullanır. Sayfa taranmışsa OCR satırlarını
  * aynı ayıklayıcıya verir; formül ve şekil görseli kırpılır, metne çevrilmez.

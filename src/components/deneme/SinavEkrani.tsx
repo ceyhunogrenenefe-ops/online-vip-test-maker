@@ -275,18 +275,20 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
                           </p>
                           {soru.gorsel ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={soru.gorsel} alt={`Soru ${soru.sira}`} className="mt-2 max-h-80 max-w-full rounded border bg-white object-contain" />
+                            <img src={soru.gorsel} alt={`Soru ${soru.sira}`} className="mt-2 max-h-[75vh] max-w-full rounded border bg-white object-contain" />
                           ) : null}
-                          <p className="mt-2 font-medium">{soru.metin}</p>
-                          <ul className="mt-2 space-y-1 text-sm">
-                            {HARFLER.map((h) =>
-                              soru.secenekler[h] ? (
-                                <li key={h}>
-                                  {h}) {soru.secenekler[h]}
-                                </li>
-                              ) : null
-                            )}
-                          </ul>
+                          {soru.metin ? <p className="mt-2 font-medium">{soru.metin}</p> : null}
+                          {HARFLER.some((h) => soru.secenekler[h] && soru.secenekler[h] !== h) ? (
+                            <ul className="mt-2 space-y-1 text-sm">
+                              {HARFLER.map((h) =>
+                                soru.secenekler[h] ? (
+                                  <li key={h}>
+                                    {h}) {soru.secenekler[h]}
+                                  </li>
+                                ) : null
+                              )}
+                            </ul>
+                          ) : null}
                           {kars ? (
                             <p className={`mt-2 text-sm font-medium ${kars.verilen === kars.dogru ? "text-green-700" : "text-red-700"}`}>
                               Sizin cevabınız {kars.verilen || "boş"} · Doğru cevap {kars.dogru}
