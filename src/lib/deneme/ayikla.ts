@@ -46,6 +46,7 @@ export function baslikSatiri(metin: string): Baslik | null {
   const n = norm(ham);
   if (!n || n.length > 80) return null;
   if (/^\d/.test(ham)) return null;
+  if (/^[A-D\s.,]+$/i.test(ham)) return null;
   if (n === "cevap anahtari" || n.startsWith("cevap anahtari")) return "anahtar";
   if (n === "sozel" || n === "sayisal" || n === "deneme" || n === "sinav") return "atla";
   for (const b of BILINEN) {
@@ -392,4 +393,76 @@ export function ayikla(sayfalar: SayfaGirdi[]): AyiklananSoru[] {
   anahtariUygula(sorular, harita, konuEtiketli, sirali);
   kutulariGenislet(sorular);
   return sorular;
+}
+
+export type AnahtarKayit = { ders: string | null; no: number; sik: Sik };
+
+/** Öğretmenin yüklediği cevap metnini ders ve soru numarasına böler. */
+export function anahtarOku(metin: string): AnahtarKayit[] {
+  const kayit: AnahtarKayit[] = [];
+  let ders: string | null = null;
+  let sira = 0;
+  for (const ham of metin.split(/\r?\n/)) {
+    const t = ham.trim();
+    if (!t) continue;
+    const kolon = t.split(":");
+    const solBaslik = kolon.length > 1 ? baslikSatiri(kolon[0].trim()) : null;
+    const baslik = typeof solBaslik === "string" ? solBaslik : baslikSatiri(t.replace(/:$/, ""));
+    if (baslik === "anahtar" || baslik === "atla") continue;
+    if (typeof baslik === "string") {
+      ders = baslik;
+      sira = 0;
+      if (kolon.length < 2 || typeof solBaslik !== "string") continue;
+    }
+    const hedef = typeof solBaslik === "string" ? kolon.slice(1).join(":") : t;
+    const cift = anahtarCiftleri(hedef);
+    if (!cift.length) {
+      const yapisik = [...hedef.matchAll(/(\d{1,3})\s*([A-D])(?!\d)/gi)];
+      for (const m of yapisik) cift.push({ no: Number(m[1]), sik: m[2].toUpperCase() as Sik });
+    }
+    if (cift.length) {
+      for (const c of cift) kayit.push({ ders, no: c.no, sik: c.sik });
+      continue;
+    }
+    if (!/^[A-Da-d\s.,]+$/.test(hedef)) continue;
+    const harfler = hedef.replace(/[^A-Da-d]/g, "");
+    for (const ch of harfler.toUpperCase()) {
+      sira += 1;
+      kayit.push({ ders, no: sira, sik: ch as Sik });
+    }
+  }
+  return kayit;
+}
+
+/** Kesilen sorulara cevap anahtarını ders ve numara ile yazar. */
+export function cevaplariEsle<T extends { id: string; ders: string; numara: number | null }>(
+  sorular: T[],
+  kayitlar: AnahtarKayit[]
+): { id: string; dogru: Sik }[] {
+  const sonuc: { id: string; dogru: Sik }[] = [];
+  const kullanilan = new Set<string>();
+  const etiketli = kayitlar.some((k) => k.ders);
+  if (etiketli) {
+    for (const k of kayitlar) {
+      if (!k.ders) continue;
+      const soru = sorular.find(
+        (s) => !kullanilan.has(s.id) && s.numara === k.no && norm(s.ders) === norm(k.ders!)
+      );
+      if (!soru) continue;
+      kullanilan.add(soru.id);
+      sonuc.push({ id: soru.id, dogru: k.sik });
+    }
+    return sonuc;
+  }
+  const numarali = sorular.filter((s) => s.numara);
+  if (kayitlar.length === numarali.length && kayitlar.length > 0) {
+    return numarali.map((s, i) => ({ id: s.id, dogru: kayitlar[i].sik }));
+  }
+  for (const k of kayitlar) {
+    const soru = sorular.find((s) => !kullanilan.has(s.id) && s.numara === k.no);
+    if (!soru) continue;
+    kullanilan.add(soru.id);
+    sonuc.push({ id: soru.id, dogru: k.sik });
+  }
+  return sonuc;
 }

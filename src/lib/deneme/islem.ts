@@ -1,3 +1,4 @@
+import { anahtarOku, cevaplariEsle } from "./ayikla.ts";
 import { depoIsle, depoOku, type DepoDosya } from "./depo.ts";
 import type {
   AyiklananSoru,
@@ -96,6 +97,30 @@ export async function pdfEkle(girdi: {
     });
     depo.sorular.unshift(...sorular);
     return { pdfId, soruSayisi: sorular.length, sorular };
+  });
+}
+
+export async function cevapAnahtariUygula(pdfId: string, metin: string) {
+  const kayitlar = anahtarOku(metin || "");
+  if (!kayitlar.length) throw new DenemeHatasi("Cevap anahtarında eşleşecek cevap yok.");
+  return depoIsle((depo) => {
+    const liste = depo.sorular.filter((s) => s.pdfId === pdfId);
+    if (!liste.length) throw new DenemeHatasi("Bu PDF’te kesilmiş soru yok.", 404);
+    const eslesen = cevaplariEsle(liste, kayitlar);
+    if (!eslesen.length) throw new DenemeHatasi("Anahtar kesilen sorularla eşleşmedi. Ders adını ve soru numarasını kontrol edin.");
+    for (const e of eslesen) {
+      const soru = depo.sorular.find((s) => s.id === e.id);
+      if (!soru) continue;
+      soru.dogru = e.dogru;
+      soru.inceleme = false;
+      soru.incelemeNeden = null;
+    }
+    const numarali = liste.filter((s) => s.numara);
+    return {
+      eslesen: eslesen.length,
+      toplam: numarali.length,
+      eslesmeyen: numarali.filter((s) => !eslesen.some((e) => e.id === s.id)).length,
+    };
   });
 }
 
