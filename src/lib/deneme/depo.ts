@@ -57,12 +57,11 @@ function cakisma(e: unknown): boolean {
 }
 
 async function blobOku(): Promise<{ depo: DepoDosya; etag: string | null }> {
-  const { get } = await import("@vercel/blob");
+  const { get, head } = await import("@vercel/blob");
+  let etag: string | null = null;
   try {
-    const indir = await get(BLOB_YOL, { access: "private", useCache: false });
-    if (!indir || indir.statusCode !== 200 || !indir.stream) return { depo: bos(), etag: null };
-    const metin = await new Response(indir.stream).text();
-    return { depo: doldur(JSON.parse(metin) as DepoDosya), etag: indir.blob.etag };
+    const bilgi = await head(BLOB_YOL);
+    etag = bilgi.etag || null;
   } catch (e) {
     const ad = e instanceof Error ? e.name : "";
     const mesaj = e instanceof Error ? e.message : String(e);
@@ -71,6 +70,10 @@ async function blobOku(): Promise<{ depo: DepoDosya; etag: string | null }> {
     }
     throw e;
   }
+  const indir = await get(BLOB_YOL, { access: "private", useCache: false });
+  if (!indir || indir.statusCode !== 200 || !indir.stream) return { depo: bos(), etag: null };
+  const metin = await new Response(indir.stream).text();
+  return { depo: doldur(JSON.parse(metin) as DepoDosya), etag };
 }
 
 async function blobYaz(depo: DepoDosya, etag: string | null): Promise<boolean> {

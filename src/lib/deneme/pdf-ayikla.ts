@@ -22,7 +22,31 @@ function kirp(kaynak: Kanvas | undefined, kutu: Kutu | null): string | null {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
-  return c.toDataURL("image/jpeg", 0.72);
+  return jpegSigdir(c);
+}
+
+/** Üç soruluk kayıt Vercel gövde sınırının altında kalsın. */
+function jpegSigdir(kaynak: HTMLCanvasElement): string {
+  let tuval = kaynak;
+  for (let tur = 0; tur < 4; tur++) {
+    let kalite = 0.72;
+    let url = tuval.toDataURL("image/jpeg", kalite);
+    while (url.length > 900_000 && kalite > 0.45) {
+      kalite -= 0.1;
+      url = tuval.toDataURL("image/jpeg", kalite);
+    }
+    if (url.length <= 900_000) return url;
+    const kucuk = document.createElement("canvas");
+    kucuk.width = Math.max(2, Math.round(tuval.width * 0.7));
+    kucuk.height = Math.max(2, Math.round(tuval.height * 0.7));
+    const ctx = kucuk.getContext("2d");
+    if (!ctx) return url;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, kucuk.width, kucuk.height);
+    ctx.drawImage(tuval, 0, 0, kucuk.width, kucuk.height);
+    tuval = kucuk;
+  }
+  return tuval.toDataURL("image/jpeg", 0.5);
 }
 
 /**
