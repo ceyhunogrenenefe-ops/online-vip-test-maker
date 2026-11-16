@@ -175,6 +175,17 @@ test("aynı kök iki kez seçilmez, eksik ders sayılır", () => {
   assert.equal(secim.eksikler[0].ders, "İngilizce");
   assert.equal(secim.eksikler[0].bulunan, 0);
   assert.equal(secim.eksikler[0].gereken, 2);
+  const kesik = soruSec(
+    [0, 1].map((i) => ({
+      ...havuz[0],
+      id: `kesik-${i}`,
+      metin: "",
+      gorsel: "data:image/jpeg;base64,aa",
+    })),
+    [{ id: "sozel", ad: "Sözel", sureDakika: 20, dersler: [{ ders: "Türkçe", adet: 2 }] }],
+    ["p1"]
+  );
+  assert.equal(kesik.sorular.length, 2);
 });
 
 test("net yanlış cezasını ders ders uygular", () => {

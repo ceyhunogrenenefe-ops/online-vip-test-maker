@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DenemeKirp, type KesikSoru } from "@/components/deneme/DenemeKirp";
 import { lgsBolumleri } from "@/lib/deneme/sablon";
-import { pdfdenAyikla } from "@/lib/deneme/pdf-ayikla";
 import { DERS_ADLARI, SIKLAR, VARSAYILAN_CEZA } from "@/lib/deneme/model";
-import type { Bolum, DersSonuc, EksikDers, PdfKayit, SecilenSoru, Sik, Soru } from "@/lib/deneme/model";
+import type { AyiklananSoru, Bolum, DersSonuc, EksikDers, PdfKayit, SecilenSoru, Sik, Soru } from "@/lib/deneme/model";
 
 type DenemeOzet = {
   id: string;
@@ -63,6 +63,7 @@ export function DenemePaneli() {
   const [durum, setDurum] = useState("");
   const [hata, setHata] = useState("");
   const [yeniDers, setYeniDers] = useState<string>(DERS_ADLARI[0]);
+  const pdfKimlik = useRef<{ ad: string; id: string } | null>(null);
 
   const yenile = async () => {
     const veri = await api<{ pdfler: PdfKayit[]; sorular: Soru[]; denemeler: DenemeOzet[] }>("?op=havuz");
@@ -75,39 +76,43 @@ export function DenemePaneli() {
     void yenile().catch((e: Error) => setHata(e.message));
   }, []);
 
-  const yukle = async (liste: FileList | null) => {
-    if (!liste?.length) return;
+  const yerlestir = async (kesik: KesikSoru) => {
     setHata("");
-    try {
-      for (const file of Array.from(liste)) {
-        const ayik = await pdfdenAyikla(file, setDurum);
-        if (!ayik.sorular.length) {
-          setHata(`${file.name} içinde soru bulunamadı.`);
-          continue;
-        }
-        let pdfId = "";
-        for (let i = 0; i < ayik.sorular.length; i += 3) {
-          const dilim = ayik.sorular.slice(i, i + 3);
-          setDurum(`${file.name}: sorular kaydediliyor`);
-          if (!pdfId) {
-            const kayit = await api<{ pdfId: string }>("", {
-              op: "pdf",
-              ad: file.name,
-              sayfaSayisi: ayik.sayfaSayisi,
-              sorular: dilim,
-            });
-            pdfId = kayit.pdfId;
-          } else {
-            await api("", { op: "pdf-ek", pdfId, sorular: dilim });
-          }
-        }
-        setSeciliPdf((v) => (v.includes(pdfId) ? v : [...v, pdfId]));
-      }
-      await yenile();
-      setDurum("PDF havuza alındı. Soruları kontrol edin.");
-    } catch (e) {
-      setHata(e instanceof Error ? e.message : "PDF okunamadı.");
+    const sira = sorular.filter((s) => s.ders === kesik.ders).length + 1;
+    const soru: AyiklananSoru = {
+      yerelId: crypto.randomUUID(),
+      ders: kesik.ders,
+      sayfa: kesik.sayfa,
+      numara: sira,
+      metin: "",
+      secenekler: { A: "A", B: "B", C: "C", D: "D" },
+      dogru: kesik.dogru,
+      grupId: null,
+      ortakMetin: null,
+      guven: 100,
+      inceleme: false,
+      incelemeNeden: null,
+      matematikVar: false,
+      kutu: { x: 0, y: 0, w: 1, h: 1 },
+      ortakKutu: null,
+    };
+    const paket = { soru, gorsel: kesik.gorsel, ortakGorsel: null as string | null };
+    let pdfId = pdfKimlik.current?.ad === kesik.dosyaAd ? pdfKimlik.current.id : "";
+    if (!pdfId) {
+      const kayit = await api<{ pdfId: string }>("", {
+        op: "pdf",
+        ad: kesik.dosyaAd,
+        sayfaSayisi: kesik.sayfaSayisi || 1,
+        sorular: [paket],
+      });
+      pdfId = kayit.pdfId;
+      pdfKimlik.current = { ad: kesik.dosyaAd, id: pdfId };
+    } else {
+      await api("", { op: "pdf-ek", pdfId, sorular: [paket] });
     }
+    setSeciliPdf((v) => (v.includes(pdfId) ? v : [...v, pdfId]));
+    await yenile();
+    setDurum(`${kesik.ders} sorusu havuza girdi. Denemeyi bu PDF’ten oluşturabilirsiniz.`);
   };
 
   const soruKaydet = async (soru: Soru) => {
@@ -209,24 +214,13 @@ export function DenemePaneli() {
   return (
     <div className="m-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-8">
       <section className="rounded-xl bg-white p-4 shadow">
-        <h2 className="text-lg font-bold text-dershanem-navy">PDF’den deneme</h2>
+        <h2 className="text-lg font-bold text-dershanem-navy">PDF’den soru kes</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Bir veya birden fazla deneme PDF’i yükleyin. Sorular, seçenekler, görseller ve cevap anahtarı derslere ayrılır.
-          Güvenle ayrılamayan kesit incelemede kalır.
+          Soruyu sayfadan kesin. Şıklar ve şekil karenin içinde kalsın. Kestiğiniz görsel olduğu gibi öğrenci ekranına yerleşir.
         </p>
-        <label className="mt-3 inline-flex cursor-pointer rounded-lg bg-dershanem-blue px-4 py-2 text-sm font-medium text-white">
-          PDF yükle
-          <input
-            type="file"
-            accept="application/pdf"
-            multiple
-            className="sr-only"
-            onChange={(e) => {
-              void yukle(e.target.files);
-              e.target.value = "";
-            }}
-          />
-        </label>
+        <div className="mt-3">
+          <DenemeKirp onYerles={yerlestir} />
+        </div>
         {durum ? <p className="mt-2 text-sm text-slate-700">{durum}</p> : null}
         {hata ? <p className="mt-2 text-sm font-medium text-red-700">{hata}</p> : null}
         {pdfler.length > 0 && (

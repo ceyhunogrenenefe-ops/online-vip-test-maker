@@ -25,13 +25,15 @@ export function soruSec(havuz: Soru[], bolumler: Bolum[], pdfIdler: string[]): S
       const ders = norm(istek.ders);
       const aday = havuz.filter((s) => izin.has(s.pdfId) && norm(s.ders) === ders);
       const incelemede = aday.filter((s) => s.inceleme || !s.dogru).length;
-      const hazir = aday.filter(
-        (s) => !s.inceleme && s.dogru && !kullanilan.has(s.id) && !kokler.has(kok(s.metin))
-      );
+      const hazir = aday.filter((s) => {
+        const k = kok(s.metin);
+        return !s.inceleme && s.dogru && !kullanilan.has(s.id) && (!k || !kokler.has(k));
+      });
       const al = hazir.slice(0, istek.adet);
       for (const s of al) {
         kullanilan.add(s.id);
-        kokler.add(kok(s.metin));
+        const k = kok(s.metin);
+        if (k) kokler.add(k);
         sorular.push({ soruId: s.id, bolumId: bolum.id, ders: s.ders, sira: sira++ });
       }
       if (al.length < istek.adet) {
