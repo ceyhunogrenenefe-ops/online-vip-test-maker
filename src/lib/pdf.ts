@@ -15,7 +15,6 @@ import {
   layoutHintsForColumns,
   resolveLayoutSpan,
 } from "./pdf-layout";
-import { packQuestionsForSmartPdf } from "./pdf-pack";
 import {
   drawBuiltInOpticalForm,
   drawCustomOpticalForm,
@@ -324,6 +323,9 @@ export async function generateTestPdf(
     await paintOpticalSidebar();
   };
 
+  const bosDip = () => Array.from({ length: Math.max(1, questionCols) }, () => startY);
+  let dip = bosDip();
+
   const newPage = async () => {
     await finishPageWatermark();
     doc.addPage();
@@ -331,6 +333,7 @@ export async function generateTestPdf(
     col = 0;
     x = colX(margin, colW, 0);
     y = startY;
+    dip = bosDip();
   };
 
   const pageHasQuestions = (pageIdx: number) =>
@@ -352,20 +355,6 @@ export async function generateTestPdf(
 
   await paintPageChrome();
 
-  const packParams = {
-    questionCols,
-    colInnerW,
-    pageInnerW,
-    scale,
-    pageContentH: bottomLimit - startY - opticalReserve,
-    spacing,
-    numBlockH: NUM_BLOCK_H,
-  };
-
-  const layoutQuestions = smartPack
-    ? await packQuestionsForSmartPdf(questions, packParams)
-    : questions;
-
   const renderedEntries = await Promise.all(
     questions.map(async (q) => ({
       id: q.id,
@@ -376,11 +365,11 @@ export async function generateTestPdf(
     renderedEntries.map((e) => [e.id, e.url] as const)
   );
 
-  const gorselButce = gorselButcesi(layoutQuestions.length);
+  const gorselButce = gorselButcesi(questions.length);
   const pageContentH = bottomLimit - startY - opticalReserve;
-  const uniformPlan = uniformSizing
+  const uniformPlan = uniformSizing && !smartPack
     ? await buildUniformSizingPlan(
-        layoutQuestions,
+        questions,
         renderedById,
         colInnerW,
         pageInnerW,
@@ -389,21 +378,31 @@ export async function generateTestPdf(
       )
     : null;
 
-  for (let i = 0; i < layoutQuestions.length; i++) {
+  for (let i = 0; i < questions.length; i++) {
     qNum++;
-    const q = layoutQuestions[i];
+    const q = questions[i];
     const img = await loadImage(renderedById.get(q.id)!);
     let placed = false;
 
     while (!placed) {
       const qBottom = questionBottom();
-      const remainingH = qBottom - y - spacing - NUM_BLOCK_H;
 
       let spanCols = 1;
       if (q.layoutSpan === "full") {
         spanCols = questionCols;
       } else if (q.layoutSpan === "column") {
         spanCols = 1;
+      } else if (smartPack) {
+        spanCols = resolveLayoutSpan(
+          q,
+          img,
+          questionCols,
+          colInnerW * scale,
+          pageInnerW * scale,
+          pageContentH,
+          true,
+          true
+        );
       } else if (uniformPlan) {
         spanCols = resolveUniformSpanCols(
           q,
@@ -412,22 +411,18 @@ export async function generateTestPdf(
           uniformPlan.colMaxH,
           uniformPlan.colWidth
         );
-      } else if (smartPack) {
-        spanCols = resolveLayoutSpan(
-          q,
-          img,
-          questionCols,
-          colInnerW * scale,
-          pageInnerW * scale,
-          Math.max(remainingH, 40),
-          strictColumnFit,
-          true
-        );
       }
 
       const isFull = spanCols >= questionCols;
 
-      if (isFull) await beginFullWidthRow();
+      if (smartPack) {
+        y = isFull ? Math.max(startY, ...dip) : dip[col] ?? startY;
+        x = isFull ? margin : colX(margin, colW, col);
+      } else if (isFull) {
+        await beginFullWidthRow();
+      }
+
+      const remainingH = qBottom - y - spacing - NUM_BLOCK_H;
 
       let imgW: number;
       let imgH: number;
@@ -461,40 +456,64 @@ export async function generateTestPdf(
             isFull ? questionCols : 1,
             NUM_WIDTH
           ) * scale;
-        let maxH = Math.max(
-          layoutHints.minHeightMm,
-          qBottom - y - spacing - NUM_BLOCK_H
-        );
+        let maxH = smartPack
+          ? pageContentH
+          : Math.max(
+              layoutHints.minHeightMm,
+              qBottom - y - spacing - NUM_BLOCK_H
+            );
 
         ({ w: imgW, h: imgH } = fitImageInBox(
           img,
           maxW,
           maxH,
-          layoutHints.minFillRatio,
-          layoutHints.strict
+          smartPack ? 0 : layoutHints.minFillRatio,
+          smartPack ? true : layoutHints.strict
         ));
         blockH = imgH + spacing + NUM_BLOCK_H;
 
-        while (y + blockH > qBottom && maxH > layoutHints.minHeightMm) {
-          maxH = Math.max(layoutHints.minHeightMm, maxH * 0.85);
-          ({ w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH, 0, true));
-          blockH = imgH + spacing + NUM_BLOCK_H;
+        if (!smartPack) {
+          while (y + blockH > qBottom && maxH > layoutHints.minHeightMm) {
+            maxH = Math.max(layoutHints.minHeightMm, maxH * 0.85);
+            ({ w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH, 0, true));
+            blockH = imgH + spacing + NUM_BLOCK_H;
+          }
         }
       }
 
-      if (!isFull && y + blockH > qBottom) {
+      if (!isFull && y + blockH > qBottom && !(smartPack && y <= startY + 1)) {
         if (col < questionCols - 1) {
           col++;
           x = colX(margin, colW, col);
-          y = startY;
+          y = smartPack ? dip[col] ?? startY : startY;
           continue;
         }
         await newPage();
         continue;
       }
       if (isFull && y + blockH > qBottom) {
-        await newPage();
-        continue;
+        if (smartPack && y <= startY + 1) {
+          const maxW =
+            columnContentWidth(colW, COL_GAP, questionCols, NUM_WIDTH) * scale;
+          const maxH = Math.max(
+            layoutHints.minHeightMm,
+            qBottom - y - spacing - NUM_BLOCK_H
+          );
+          ({ w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH, 0, true));
+          blockH = imgH + spacing + NUM_BLOCK_H;
+        } else {
+          await newPage();
+          continue;
+        }
+      }
+      if (!isFull && smartPack && y <= startY + 1 && y + blockH > qBottom) {
+        const maxW = columnContentWidth(colW, COL_GAP, 1, NUM_WIDTH) * scale;
+        const maxH = Math.max(
+          layoutHints.minHeightMm,
+          qBottom - y - spacing - NUM_BLOCK_H
+        );
+        ({ w: imgW, h: imgH } = fitImageInBox(img, maxW, maxH, 0, true));
+        blockH = imgH + spacing + NUM_BLOCK_H;
       }
 
       const drawX = isFull ? margin : x;
@@ -524,7 +543,15 @@ export async function generateTestPdf(
 
       y += blockH;
 
-      if (isFull) {
+      if (smartPack) {
+        if (isFull) {
+          dip = dip.map(() => y);
+          col = 0;
+        } else {
+          dip[col] = y;
+        }
+        x = colX(margin, colW, col);
+      } else if (isFull) {
         col = 0;
         x = colX(margin, colW, 0);
       }
