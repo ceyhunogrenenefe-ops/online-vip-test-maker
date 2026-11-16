@@ -16,11 +16,11 @@ type Soru = {
   ortakGorsel: string | null;
   grupId: string | null;
 };
-type Sinav = { deneme: { id: string; kod: string; ad: string; bolumler: Bolum[] }; sorular: Soru[]; onizleme?: boolean };
+type Sinav = { deneme: { id: string; kod: string; ad: string; bolumler: Bolum[]; sikSayisi?: 4 | 5 }; sorular: Soru[]; onizleme?: boolean };
 type Sonuc = { dogru: number; yanlis: number; bos: number; net: number; dersler: { ders: string; dogru: number; yanlis: number; bos: number; net: number }[] };
 type Karsilastirma = { soruId: string; verilen: Sik | null; dogru: Sik | null; sira: number };
 
-const HARFLER: Sik[] = ["A", "B", "C", "D"];
+const TUM_HARFLER: Sik[] = ["A", "B", "C", "D", "E"];
 
 async function oku<T>(yol: string, body?: unknown): Promise<T> {
   const r = await fetch(yol, {
@@ -51,6 +51,7 @@ export function SinavEkrani({ kod, onizlemeId }: { kod?: string; onizlemeId?: st
   const [mesaj, setMesaj] = useState("");
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const kayitHazir = useRef(false);
+  const HARFLER = TUM_HARFLER.slice(0, sinav?.deneme.sikSayisi === 5 ? 5 : 4);
   const sureDoldu = useRef(false);
 
   useEffect(() => {

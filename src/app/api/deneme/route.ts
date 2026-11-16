@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { gorselKaydet } from "@/lib/deneme/depo";
 import type { AyiklananSoru, Bolum, SecilenSoru, Soru } from "@/lib/deneme/model";
 import {
   DenemeHatasi,
@@ -8,6 +9,8 @@ import {
   denemeYayinla,
   cevapAnahtariUygula,
   havuzOku,
+  hazirDenemeYayinla,
+  GORSEL_YOLU,
   onizlemeGetir,
   pdfEkle,
   pdfSoruEkle,
@@ -93,6 +96,19 @@ export async function POST(req: Request) {
         return NextResponse.json(await smsYeniden(body.oturumId || ""));
       case "anahtar":
         return NextResponse.json(await cevapAnahtariUygula(body.pdfId || "", body.metin || ""));
+      case "gorsel": {
+        // Stüdyodan tek tek yüklenen soru görseli (JPEG data URL).
+        const g = body as unknown as { veri?: string };
+        const m = typeof g.veri === "string" ? g.veri.match(/^data:image\/jpeg;base64,(.+)$/) : null;
+        if (!m) return NextResponse.json({ hata: "Görsel okunamadı." }, { status: 400 });
+        const veri = Buffer.from(m[1], "base64");
+        if (veri.length > 3_000_000) return NextResponse.json({ hata: "Görsel çok büyük." }, { status: 400 });
+        const gid = crypto.randomUUID();
+        await gorselKaydet(gid, veri);
+        return NextResponse.json({ yol: `${GORSEL_YOLU}${gid}` });
+      }
+      case "hazir":
+        return NextResponse.json(await hazirDenemeYayinla(body as never));
       default:
         return NextResponse.json({ hata: "Bilinmeyen işlem." }, { status: 400 });
     }
