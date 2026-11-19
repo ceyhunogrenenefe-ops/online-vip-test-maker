@@ -9,6 +9,9 @@ import {
   loadProjectSummaries,
   persistProject,
 } from "./project-actions";
+import { saveQuestion } from "@/lib/storage";
+
+const bekleyenKayit = new Map<string, ReturnType<typeof setTimeout>>();
 
 interface AppState {
   questions: Question[];
@@ -61,12 +64,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? s.draftIds
         : [...s.draftIds, q.id],
     })),
-  updateQuestion: (id, patch) =>
+  updateQuestion: (id, patch) => {
     set((s) => ({
       questions: s.questions.map((q) =>
         q.id === id ? { ...q, ...patch } : q
       ),
-    })),
+    }));
+    // Cevap anahtarı, yerleşim vb. değişiklikler önceden kaydedilmiyordu;
+    // artık tarayıcıya ve ortak havuza da yazılır.
+    const eski = bekleyenKayit.get(id);
+    if (eski) clearTimeout(eski);
+    bekleyenKayit.set(
+      id,
+      setTimeout(() => {
+        bekleyenKayit.delete(id);
+        const q = get().questions.find((x) => x.id === id);
+        if (q) void saveQuestion(q);
+      }, 800)
+    );
+  },
   removeQuestion: (id) =>
     set((s) => ({
       questions: s.questions.filter((x) => x.id !== id),

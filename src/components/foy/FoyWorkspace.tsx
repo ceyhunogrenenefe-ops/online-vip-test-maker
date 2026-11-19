@@ -5,7 +5,7 @@ import { Plus, Redo2, Save, Sigma, Undo2 } from "lucide-react";
 import type { DocBlock, GorselRol } from "@/lib/pdf-blocks";
 import type { PasteBlock } from "@/lib/paste-clean";
 import { cleanPastedText } from "@/lib/paste-clean";
-import { KAZANIM_EKSIK, kazanimYaz, numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
+import { KAZANIM_EKSIK, blokEtiketi, kazanimYaz, numaraliSoruMu, soruNumaralariniYenile, yapistirmayiBelgeye } from "@/lib/foy-icerik";
 import { foyPdfOlustur, foyTeshisMesaji, type FoyTeshis } from "@/lib/foy-pdf";
 import { videoLinkiGecerli, videoQrDataUrl } from "@/lib/video-qr";
 import { foyKaliteKontrol, puanOner, soruOgeleriniYenile, type FoyOge } from "@/lib/foy-baski";
@@ -511,16 +511,23 @@ export function FoyWorkspace() {
   const bankaya = async () => {
     const o = ogelerRef.current[secili];
     if (!o) return;
-    await foyBankaKaydet({
-      id: yeniId(),
-      ders: kunye.brans,
-      sinif: String(kunye.sinif),
-      konu: kunye.konu,
-      zorluk: "",
-      tip: o.blok.kind,
-      blok: o.blok,
-      olusturma: Date.now(),
-    });
+    try {
+      await foyBankaKaydet(
+        {
+          id: yeniId(),
+          ders: kunye.brans,
+          sinif: String(kunye.sinif),
+          konu: kunye.konu,
+          zorluk: "",
+          tip: o.blok.kind,
+          blok: o.blok,
+          olusturma: Date.now(),
+        },
+        blokEtiketi(o.blok)
+      );
+    } catch (e) {
+      alert(`Soru bu cihaza kaydedildi ama ortak havuza gönderilemedi: ${e instanceof Error ? e.message : e}`);
+    }
     setBankaYenile((n) => n + 1);
     setArac("banka");
   };
