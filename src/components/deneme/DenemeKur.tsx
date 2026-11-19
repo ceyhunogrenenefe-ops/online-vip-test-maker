@@ -7,6 +7,7 @@ import { FORMATLAR, formatBul } from "@/lib/deneme/format";
 import { denemeleriYaz, gorselOku, gorselleriYaz, gorselSil, sinavLinki, type DenemeTaslak, type HavuzSoru } from "@/lib/deneme/havuz";
 import { cevapAnahtariPdf, kitapcikOlustur, type Kitap } from "@/lib/deneme/kitapcik";
 import { otomatikTamamla, secimDegistir } from "@/lib/deneme/secim";
+import { BRANS_ADETLERI, bransAdi, bransOturumu, bransSecenekleri } from "@/lib/deneme/brans";
 
 const anahtar = (test: string, ders: string) => `${test}|${ders}`;
 
@@ -37,6 +38,31 @@ function yeniTaslak(formatId: string): DenemeTaslak {
     olusturma: Date.now(),
     yayin: null,
   };
+}
+
+function yeniBransTaslak(formatId: string, test: string, ders: string | null, adet: number): DenemeTaslak {
+  const f = formatBul(formatId);
+  const brans = { test, ders };
+  const oturum = bransOturumu(f, brans, adet);
+  const toplam = oturum.testler[0].dersler.reduce((a, d) => a + d.adet, 0);
+  return {
+    id: crypto.randomUUID(),
+    ad: `${f.ad.replace(/\s*\(.*\)\s*/, "")} ${bransAdi(brans)} Branş Denemesi (${toplam} soru)`,
+    formatId,
+    ceza: f.ceza,
+    sikSayisi: f.sikSayisi,
+    oturumlar: [oturum],
+    brans,
+    secim: {},
+    olusturma: Date.now(),
+    yayin: null,
+  };
+}
+
+/** Kitapçıkta ve listede görünen format adı; branşta "LGS (8. Sınıf) · Türkçe". */
+function gorunenFormat(t: DenemeTaslak) {
+  const f = formatBul(t.formatId).ad;
+  return t.brans ? `${f} · ${bransAdi(t.brans)}` : f;
 }
 
 function indir(b: Blob, ad: string) {
@@ -74,6 +100,9 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
   const [pdfFiltre, setPdfFiltre] = useState("");
   const [is, setIs] = useState("");
   const [hata, setHata] = useState("");
+  const [bransFormat, setBransFormat] = useState("LGS");
+  const [bransNo, setBransNo] = useState(0);
+  const [bransAdet, setBransAdet] = useState(20);
 
   const soruHarita = useMemo(() => new Map(veri.sorular.map((s) => [s.id, s])), [veri.sorular]);
 
@@ -119,6 +148,86 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
             })}
           </div>
         </section>
+        <section className="rounded-xl bg-white p-4 shadow">
+          <h2 className="text-lg font-bold text-dershanem-navy">Branş denemesi</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Tek dersten deneme: formatı ve dersi seç, soru sayısını belirle. Sorular o formatın havuzundan gelir.
+          </p>
+          {(() => {
+            const f = formatBul(bransFormat);
+            const secenekler = bransSecenekleri(f);
+            const s = secenekler[Math.min(bransNo, secenekler.length - 1)];
+            const havuz = (x: (typeof secenekler)[number]) =>
+              veri.sorular.filter((q) => q.formatId === f.id && q.test === x.test && (!x.ders || q.ders === x.ders)).length;
+            const mevcut = havuz(s);
+            return (
+              <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
+                <label>
+                  Format
+                  <select
+                    className="mt-1 block rounded border px-2 py-1.5"
+                    value={bransFormat}
+                    onChange={(e) => {
+                      setBransFormat(e.target.value);
+                      setBransNo(0);
+                    }}
+                  >
+                    {FORMATLAR.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.ad}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Ders
+                  <select className="mt-1 block rounded border px-2 py-1.5" value={bransNo} onChange={(e) => setBransNo(Number(e.target.value))}>
+                    {secenekler.map((x, i) => (
+                      <option key={x.ad} value={i}>
+                        {x.ad} · havuzda {havuz(x)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div>
+                  Soru sayısı
+                  <div className="mt-1 flex items-center gap-1">
+                    {BRANS_ADETLERI.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`rounded border px-3 py-1.5 font-semibold ${bransAdet === n ? "border-dershanem-blue bg-dershanem-sky text-dershanem-navy" : ""}`}
+                        onClick={() => setBransAdet(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      className="w-20 rounded border px-2 py-1.5"
+                      value={bransAdet}
+                      onChange={(e) => setBransAdet(Math.max(1, Math.min(200, Number(e.target.value) || 1)))}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded bg-dershanem-navy px-4 py-2 font-semibold text-white"
+                  onClick={() => void kaydet(yeniBransTaslak(f.id, s.test, s.ders, bransAdet))}
+                >
+                  Branş denemesi oluştur
+                </button>
+                {mevcut < bransAdet ? (
+                  <p className="w-full text-xs text-amber-700">
+                    Havuzda bu dersten {mevcut} soru var; {bransAdet} soru için önce bu dersin PDF’lerini yükleyin.
+                  </p>
+                ) : null}
+              </div>
+            );
+          })()}
+        </section>
         {veri.denemeler.length ? (
           <section className="rounded-xl bg-white p-4 shadow">
             <h2 className="text-lg font-bold text-dershanem-navy">Kayıtlı denemeler</h2>
@@ -129,7 +238,7 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
                   <li key={d.id} className="flex items-center gap-2 py-2">
                     <span className="font-medium">{d.ad}</span>
                     <span className="text-slate-500">
-                      {formatBul(d.formatId).ad} · {secilen} soru {d.yayin ? `· online: ${d.yayin.kod}` : ""}
+                      {gorunenFormat(d)} {d.brans ? "branş" : ""} · {secilen} soru {d.yayin ? `· online: ${d.yayin.kod}` : ""}
                     </span>
                     <button type="button" className="ml-auto rounded bg-dershanem-navy px-3 py-1 text-white" onClick={() => setTaslak(d)}>
                       Aç
@@ -155,7 +264,6 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
     );
   }
 
-  const format = formatBul(taslak.formatId);
   const adaylar = (test: string, ders: string) =>
     veri.sorular.filter((s) => s.formatId === taslak.formatId && s.test === test && s.ders === ders);
   const tumSecili = new Set(Object.values(taslak.secim).flat());
@@ -224,14 +332,15 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
                 : null,
           });
         }
-        if (sorular.length) testler.push({ ad: t.ad, sorular });
+        if (sorular.length) testler.push({ ad: t.baslik ?? t.ad, sorular });
       }
       if (testler.length) oturumlar.push({ ad: o.ad, sureDakika: o.sureDakika, testler });
     }
     const ayar = kitapAyar(taslak);
     return {
       ad: taslak.ad,
-      formatAd: format.ad,
+      formatAd: gorunenFormat(taslak),
+      kapakYazi: taslak.brans ? "BRANŞ DENEMESİ" : undefined,
       sinavAdi: ayar.sinavAdi,
       kurum: ayar.kurum,
       denemeNo: ayar.denemeNo,
@@ -274,7 +383,7 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
         id: crypto.randomUUID(),
         ad: o.ad,
         sureDakika: o.sureDakika,
-        dersler: o.testler.map((t) => ({ ders: t.ad, adet: testSorulari(t).length })).filter((d) => d.adet > 0),
+        dersler: o.testler.map((t) => ({ ders: t.baslik ?? t.ad, adet: testSorulari(t).length })).filter((d) => d.adet > 0),
       }));
       const sorular = [];
       let n = 0;
@@ -283,7 +392,7 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
           for (const s of testSorulari(t)) {
             setIs(`Görseller yükleniyor ${++n}/${toplamSecili}`);
             sorular.push({
-              ders: t.ad,
+              ders: t.baslik ?? t.ad,
               bolumId: bolumler[oi].id,
               dogru: s.dogru,
               gorsel: await yukle(s.id),
@@ -322,7 +431,7 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
           disabled={kilitli}
           onChange={(e) => void kaydet({ ...taslak, ad: e.target.value })}
         />
-        <span className="rounded bg-dershanem-sky px-2 py-1 text-sm font-semibold text-dershanem-navy">{format.ad}</span>
+        <span className="rounded bg-dershanem-sky px-2 py-1 text-sm font-semibold text-dershanem-navy">{gorunenFormat(taslak)}</span>
         <label className="text-sm">
           Yanlış cezası{" "}
           <select
@@ -568,7 +677,7 @@ export function DenemeKur({ veri, yenile }: { veri: HavuzVeri; yenile: () => Pro
             return (
               <div key={`${o.ad}-${t.ad}`} className="mt-3">
                 <h4 className="text-sm font-bold text-slate-700">
-                  {t.ad} ({liste.length})
+                  {t.baslik ?? t.ad} ({liste.length})
                 </h4>
                 <div className="mt-1 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-8">
                   {liste.map((s, i) => (
