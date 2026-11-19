@@ -25,6 +25,8 @@ export type Kitap = {
   sikSayisi: 4 | 5;
   ceza: number;
   oturumlar: KitapOturum[];
+  /** Kapaktaki büyük yazı; verilmezse "DENEME SINAVI". */
+  kapakYazi?: string;
   kapakGorsel?: Blob | null;
   logo?: Blob | null;
 };
@@ -155,7 +157,7 @@ async function kapak(doc: jsPDF, k: Kitap, o: KitapOturum, oturumNo: number) {
   yazi(doc, "bold", 15, LACIVERT);
   doc.text(k.ad.toLocaleUpperCase("tr"), A4.w / 2, 62, { align: "center" });
   yazi(doc, "bold", 46, KIRMIZI);
-  doc.text("DENEME SINAVI", A4.w / 2, 82, { align: "center" });
+  doc.text(k.kapakYazi ?? "DENEME SINAVI", A4.w / 2, 82, { align: "center" });
 
   // Kitapçık bilgi kutusu
   let y = 92;

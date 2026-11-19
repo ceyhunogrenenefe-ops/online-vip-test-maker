@@ -47,7 +47,14 @@ export type DenemeTaslak = {
   formatId: string;
   ceza: number;
   sikSayisi: 4 | 5;
-  oturumlar: { ad: string; sureDakika: number; testler: { ad: string; dersler: { ad: string; adet: number }[] }[] }[];
+  /** `ad` havuzdaki test adı; `baslik` kitapçıkta/sınavda görünen ad (branşta alt ders). */
+  oturumlar: {
+    ad: string;
+    sureDakika: number;
+    testler: { ad: string; baslik?: string; dersler: { ad: string; adet: number }[] }[];
+  }[];
+  /** Branş denemesiyse hangi test/ders. Yoksa tam deneme. */
+  brans?: { test: string; ders: string | null };
   /** "Test|Ders" → sıralı soru id'leri */
   secim: Record<string, string[]>;
   olusturma: number;
