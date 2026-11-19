@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import type { DocBlock } from "@/lib/pdf-blocks";
-import { blokEtiketi } from "@/lib/foy-icerik";
-import { foyBankaListele, foyBankaSil, type FoyBankaKaydi } from "@/lib/storage";
+import { foyBankaSil } from "@/lib/storage";
+import { havuzBankaGetir, havuzListele, type HavuzBanka, type HavuzListe } from "@/lib/havuz/istemci";
 
+/** Föy bankası: bütün öğretmenlerin kaydettiği bloklar (ortak havuz). */
 export function FoyBanka({
   yenileme,
   onEkle,
@@ -12,36 +13,78 @@ export function FoyBanka({
   yenileme: number;
   onEkle: (blok: DocBlock) => void;
 }) {
-  const [liste, setListe] = useState<FoyBankaKaydi[]>([]);
+  const [liste, setListe] = useState<HavuzBanka[]>([]);
+  const [ben, setBen] = useState<HavuzListe["ben"] | null>(null);
+  const [hata, setHata] = useState<string | null>(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [mesgul, setMesgul] = useState<string | null>(null);
   const [arama, setArama] = useState("");
   const [ders, setDers] = useState("");
   const [sinif, setSinif] = useState("");
+  const [ekleyen, setEkleyen] = useState("");
 
   useEffect(() => {
-    void foyBankaListele().then(setListe).catch(() => setListe([]));
+    let iptal = false;
+    setYukleniyor(true);
+    void havuzListele()
+      .then((j) => {
+        if (iptal) return;
+        setListe(j.banka);
+        setBen(j.ben);
+        setHata(null);
+      })
+      .catch((e: Error) => !iptal && setHata(e.message))
+      .finally(() => !iptal && setYukleniyor(false));
+    return () => {
+      iptal = true;
+    };
   }, [yenileme]);
 
   const sorgu = arama.toLocaleLowerCase("tr-TR");
   const goren = liste.filter((k) => {
     if (ders && k.ders !== ders) return false;
     if (sinif && k.sinif !== sinif) return false;
+    if (ekleyen && k.ekleyen.id !== ekleyen) return false;
     if (!sorgu) return true;
-    const etiket = blokEtiketi(k.blok as DocBlock).toLocaleLowerCase("tr-TR");
-    return (
-      etiket.includes(sorgu) ||
-      k.konu.toLocaleLowerCase("tr-TR").includes(sorgu) ||
-      k.tip.toLocaleLowerCase("tr-TR").includes(sorgu) ||
-      k.zorluk.toLocaleLowerCase("tr-TR").includes(sorgu)
+    return [k.etiket, k.konu, k.tip, k.zorluk, k.ekleyen.ad].some((m) =>
+      m.toLocaleLowerCase("tr-TR").includes(sorgu)
     );
   });
   const dersler = [...new Set(liste.map((k) => k.ders).filter(Boolean))];
+  const ekleyenler = [...new Map(liste.map((k) => [k.ekleyen.id, k.ekleyen.ad])).entries()];
+
+  const ekle = async (k: HavuzBanka) => {
+    setMesgul(k.id);
+    try {
+      const tam = await havuzBankaGetir(k.id);
+      onEkle(tam.blok as DocBlock);
+    } catch (e) {
+      setHata(e instanceof Error ? e.message : "Eklenemedi.");
+    } finally {
+      setMesgul(null);
+    }
+  };
+
+  const sil = async (k: HavuzBanka) => {
+    if (!confirm("Bu kayıt ortak havuzdan herkes için silinecek. Emin misiniz?")) return;
+    setMesgul(k.id);
+    try {
+      await foyBankaSil(k.id);
+      setListe((p) => p.filter((x) => x.id !== k.id));
+    } catch (e) {
+      setHata(e instanceof Error ? e.message : "Silinemedi.");
+    } finally {
+      setMesgul(null);
+    }
+  };
 
   return (
     <div className="space-y-2 text-xs">
+      <p className="text-[11px] text-slate-500">Ortak havuz: bütün öğretmenlerin kaydettiği sorular.</p>
       <input
         value={arama}
         onChange={(e) => setArama(e.target.value)}
-        placeholder="Konu, tür veya metin ara"
+        placeholder="Konu, tür, metin veya öğretmen ara"
         className="w-full rounded border border-slate-300 px-2 py-1"
       />
       <div className="grid grid-cols-2 gap-1">
@@ -59,30 +102,51 @@ export function FoyBanka({
             </option>
           ))}
         </select>
+        <select
+          value={ekleyen}
+          onChange={(e) => setEkleyen(e.target.value)}
+          className="col-span-2 rounded border px-1 py-1"
+        >
+          <option value="">Tüm öğretmenler</option>
+          {ekleyenler.map(([id, ad]) => (
+            <option key={id} value={id}>
+              {ad}
+            </option>
+          ))}
+        </select>
       </div>
-      {goren.length === 0 ? (
+      {hata ? <p className="text-amber-800">{hata}</p> : null}
+      {yukleniyor ? (
+        <p className="text-slate-500">Havuz yükleniyor…</p>
+      ) : goren.length === 0 ? (
         <p className="text-slate-500">Kayıtlı soru yok. Ortadaki bir bloğu seçip bankaya kaydedebilirsiniz.</p>
       ) : (
         <ul className="max-h-72 space-y-1 overflow-y-auto">
           {goren.map((k) => (
             <li key={k.id} className="rounded border bg-white p-2">
-              <p className="truncate">{blokEtiketi(k.blok as DocBlock)}</p>
+              <p className="truncate">{k.etiket || k.tip}</p>
               <p className="text-[11px] text-slate-500">
-                {[k.ders, k.sinif && `${k.sinif}. sınıf`, k.konu, k.zorluk, k.tip].filter(Boolean).join(" · ")}
+                {[k.ders, k.sinif && `${k.sinif}. sınıf`, k.konu, k.zorluk, k.ekleyen.ad].filter(Boolean).join(" · ")}
               </p>
               <div className="mt-1 flex gap-2">
-                <button type="button" className="font-semibold text-dershanem-navy" onClick={() => onEkle(k.blok as DocBlock)}>
-                  Föye ekle
-                </button>
                 <button
                   type="button"
-                  className="text-red-600"
-                  onClick={() => {
-                    void foyBankaSil(k.id).then(() => setListe((p) => p.filter((x) => x.id !== k.id)));
-                  }}
+                  disabled={mesgul === k.id}
+                  className="font-semibold text-dershanem-navy disabled:opacity-50"
+                  onClick={() => void ekle(k)}
                 >
-                  Sil
+                  Föye ekle
                 </button>
+                {ben && (ben.yonetici || ben.id === k.ekleyen.id) ? (
+                  <button
+                    type="button"
+                    disabled={mesgul === k.id}
+                    className="text-red-600 disabled:opacity-50"
+                    onClick={() => void sil(k)}
+                  >
+                    Sil
+                  </button>
+                ) : null}
               </div>
             </li>
           ))}

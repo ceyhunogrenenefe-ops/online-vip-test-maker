@@ -1,12 +1,18 @@
 import { get, set, del, keys } from "idb-keyval";
 import type { Question, OnlineExam } from "@/types";
+import { havuzaBankaGonder, havuzaSoruGonder, havuzSil } from "@/lib/havuz/istemci";
 
 const Q_PREFIX = "q:";
 const EXAM_PREFIX = "exam:";
 const DRAFT_KEY = "draft:paper";
 
-export async function saveQuestion(q: Question): Promise<void> {
+/**
+ * Soruyu bu tarayıcıya kaydeder ve ortak soru havuzuna gönderir.
+ * `yalnizYerel` havuzdan zaten alınmış bir soruyu geri göndermemek içindir.
+ */
+export async function saveQuestion(q: Question, secenek?: { yalnizYerel?: boolean }): Promise<void> {
   await set(`${Q_PREFIX}${q.id}`, q);
+  if (!secenek?.yalnizYerel) void havuzaSoruGonder(q);
 }
 
 export async function getQuestion(id: string): Promise<Question | undefined> {
@@ -150,11 +156,17 @@ export async function foyBankaListele(): Promise<FoyBankaKaydi[]> {
     .sort((a, b) => b.olusturma - a.olusturma);
 }
 
-export async function foyBankaKaydet(k: FoyBankaKaydi): Promise<void> {
+/**
+ * Föy bankası kaydı ortak havuza gider. Bu tarayıcıya da yazılır;
+ * gönderim düşerse bir sonraki açılışta eşitleme yeniden dener.
+ */
+export async function foyBankaKaydet(k: FoyBankaKaydi, etiket: string): Promise<void> {
   await set(`${FOY_BANKA}${k.id}`, k);
+  await havuzaBankaGonder({ ...k, etiket });
 }
 
 export async function foyBankaSil(id: string): Promise<void> {
+  await havuzSil("banka", id);
   await del(`${FOY_BANKA}${id}`);
 }
 
