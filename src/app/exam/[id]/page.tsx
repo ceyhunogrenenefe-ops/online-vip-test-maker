@@ -3,13 +3,19 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getOnlineExam } from "@/lib/storage";
-import { gradeAnswers } from "@/lib/answer-key-pdf";
-import type { OnlineExam } from "@/types";
+import {
+  ogrenciTestiGetir,
+  sunucuyaYukle,
+  testTeslimEt,
+  type OgrenciTesti,
+} from "@/lib/online/istemci";
 
 export default function ExamPage() {
   const params = useParams();
   const id = params.id as string;
-  const [exam, setExam] = useState<OnlineExam | null>(null);
+  const [exam, setExam] = useState<OgrenciTesti | null>(null);
+  const [yukHata, setYukHata] = useState("");
+  const [gonderiliyor, setGonderiliyor] = useState(false);
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -19,10 +25,24 @@ export default function ExamPage() {
   );
 
   useEffect(() => {
-    getOnlineExam(id).then((e) => {
-      setExam(e ?? null);
-      setLoading(false);
-    });
+    let iptal = false;
+    (async () => {
+      let t = await ogrenciTestiGetir(id);
+      if (!t) {
+        // Eski sürümde yalnızca öğretmenin tarayıcısında kalan test: bu cihazdaysa sunucuya taşı.
+        const yerel = await getOnlineExam(id).catch(() => undefined);
+        if (yerel) {
+          await sunucuyaYukle(yerel);
+          t = await ogrenciTestiGetir(id);
+        }
+      }
+      if (!iptal) setExam(t);
+    })()
+      .catch((e: Error) => !iptal && setYukHata(e.message || "Sınav yüklenemedi."))
+      .finally(() => !iptal && setLoading(false));
+    return () => {
+      iptal = true;
+    };
   }, [id]);
 
   if (loading) {
@@ -36,18 +56,19 @@ export default function ExamPage() {
   if (!exam) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
-        <h1 className="text-xl font-bold">Sınav bulunamadı</h1>
+        <h1 className="text-xl font-bold">{yukHata ? "Sınav yüklenemedi" : "Sınav bulunamadı"}</h1>
         <p className="text-slate-600">
-          Bu link geçersiz olabilir veya sınav henüz bu cihazda
-          yayınlanmamış olabilir.
+          {yukHata
+            ? `${yukHata} Sayfayı yenileyip tekrar deneyin.`
+            : "Bu link geçersiz olabilir veya sınav silinmiş olabilir. Öğretmeninizden linki yeniden isteyin."}
         </p>
       </div>
     );
   }
 
-  const questions = exam.questionSnapshots;
+  const questions = exam.sorular;
 
-  const submit = () => {
+  const submit = async () => {
     if (!studentName.trim()) {
       alert("Ad soyad girin.");
       return;
@@ -60,18 +81,16 @@ export default function ExamPage() {
       if (!ok) return;
     }
 
-    const graded = gradeAnswers(questions, answers);
-    const payload = {
-      studentName,
-      answers,
-      submittedAt: Date.now(),
-      score: graded.correct,
-      total: graded.total,
-    };
-    const key = `exam-result:${exam.id}:${Date.now()}`;
-    localStorage.setItem(key, JSON.stringify(payload));
-    setScore(graded.total > 0 ? graded : null);
-    setSubmitted(true);
+    setGonderiliyor(true);
+    try {
+      const r = await testTeslimEt(exam.id, studentName, answers);
+      setScore(r.total > 0 ? { correct: r.score, total: r.total } : null);
+      setSubmitted(true);
+    } catch (e) {
+      alert(`Teslim edilemedi: ${e instanceof Error ? e.message : "bağlantı hatası"}. Tekrar deneyin.`);
+    } finally {
+      setGonderiliyor(false);
+    }
   };
 
   if (submitted) {
@@ -124,7 +143,7 @@ export default function ExamPage() {
               </p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={q.imageDataUrl}
+                src={q.gorsel}
                 alt={`Soru ${i + 1}`}
                 className="mb-4 max-w-full rounded border"
               />
@@ -159,10 +178,11 @@ export default function ExamPage() {
 
         <button
           type="button"
-          onClick={submit}
-          className="mt-8 w-full rounded-lg bg-dershanem-blue py-3 font-semibold text-white hover:bg-blue-700"
+          onClick={() => void submit()}
+          disabled={gonderiliyor}
+          className="mt-8 w-full rounded-lg bg-dershanem-blue py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
         >
-          Sınavı Teslim Et
+          {gonderiliyor ? "Gönderiliyor..." : "Sınavı Teslim Et"}
         </button>
       </div>
     </div>

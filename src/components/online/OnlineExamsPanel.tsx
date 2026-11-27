@@ -21,7 +21,14 @@ import {
   downloadAnswerKeyFromExam,
   downloadAnswerKeyFromQuestions,
 } from "@/lib/answer-key-pdf";
-import { gradeAnswers } from "@/lib/answer-key-pdf";
+import {
+  onlineTestLinki,
+  sunucuTeslimleri,
+  sunucudaVarMi,
+  sunucudanSil,
+  sunucuyaYukle,
+  type SunucuTeslim,
+} from "@/lib/online/istemci";
 
 function buildSnapshots(
   draftIds: string[],
@@ -37,27 +44,6 @@ function buildSnapshots(
     }));
 }
 
-function loadSubmissions(examId: string) {
-  const results: {
-    studentName: string;
-    answers: Record<number, string>;
-    submittedAt: number;
-    score?: number;
-    total?: number;
-  }[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key?.startsWith(`exam-result:${examId}:`)) continue;
-    try {
-      const data = JSON.parse(localStorage.getItem(key) ?? "{}");
-      if (data.studentName) results.push(data);
-    } catch {
-      /* skip */
-    }
-  }
-  return results.sort((a, b) => b.submittedAt - a.submittedAt);
-}
-
 export function OnlineExamsPanel() {
   const draftIds = useAppStore((s) => s.draftIds);
   const questions = useAppStore((s) => s.questions);
@@ -65,15 +51,56 @@ export function OnlineExamsPanel() {
   const [exams, setExams] = useState<OnlineExam[]>([]);
   const [creating, setCreating] = useState(false);
   const [viewResultsId, setViewResultsId] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<SunucuTeslim[]>([]);
+  const [sonucDurum, setSonucDurum] = useState("");
+  const [durum, setDurum] = useState("");
 
   const draftQuestions = draftIds
     .map((id) => questions.find((q) => q.id === id))
     .filter((q): q is NonNullable<typeof q> => !!q);
 
-  const load = () => getAllOnlineExams().then(setExams);
+  const load = () => getAllOnlineExams().then((l) => (setExams(l), l));
+
+  /** Eski sürümde yalnızca bu tarayıcıda kalan testleri sunucuya taşır; daha önce verilen linkler de açılır. */
+  const eskileriTasi = async (liste: OnlineExam[]) => {
+    const bekleyen = liste.filter((e) => !e.sunucuda);
+    for (let i = 0; i < bekleyen.length; i++) {
+      const e = bekleyen[i];
+      try {
+        if (await sunucudaVarMi(e.id)) {
+          await saveOnlineExam({ ...e, sunucuda: true });
+        } else {
+          await sunucuyaYukle(e, (n, t) =>
+            setDurum(`Eski testler sunucuya aktarılıyor (${i + 1}/${bekleyen.length}): ${e.title} ${n}/${t}`)
+          );
+        }
+      } catch (err) {
+        setDurum(`"${e.title}" sunucuya aktarılamadı: ${err instanceof Error ? err.message : "hata"}`);
+        return;
+      }
+    }
+    if (bekleyen.length) {
+      setDurum("");
+      await load();
+    }
+  };
+
   useEffect(() => {
-    load();
+    void load().then(eskileriTasi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!viewResultsId) return;
+    setSubmissions([]);
+    setSonucDurum("Yükleniyor...");
+    sunucuTeslimleri(viewResultsId)
+      .then((l) => {
+        setSubmissions(l);
+        setSonucDurum("");
+      })
+      .catch((e: Error) => setSonucDurum(e.message));
+  }, [viewResultsId]);
 
   const publish = async () => {
     if (draftIds.length === 0) {
@@ -101,28 +128,52 @@ export function OnlineExamsPanel() {
       published: true,
       durationMinutes: 40,
     };
-    await saveOnlineExam(exam);
-    await load();
-    setCreating(false);
-    const url = `${window.location.origin}/exam/${exam.id}`;
-    navigator.clipboard.writeText(url);
-    alert(`Online test yayınlandı!\nLink kopyalandı:\n${url}`);
+    try {
+      await saveOnlineExam(exam);
+      await sunucuyaYukle(exam, (n, t) => setDurum(`Yayınlanıyor: görseller ${n}/${t}`));
+      await load();
+      const url = onlineTestLinki(exam.id);
+      await navigator.clipboard.writeText(url).catch(() => undefined);
+      alert(`Online test yayınlandı!\nLink kopyalandı:\n${url}`);
+    } catch (e) {
+      await load();
+      alert(`Test sunucuya yüklenemedi, link öğrencilerde açılmaz: ${e instanceof Error ? e.message : "hata"}\nTekrar denemek için link simgesine basın.`);
+    } finally {
+      setDurum("");
+      setCreating(false);
+    }
   };
 
-  const copyLink = (id: string) => {
-    const url = `${window.location.origin}/exam/${id}`;
-    navigator.clipboard.writeText(url);
-    alert("Link kopyalandı.");
+  const copyLink = async (exam: OnlineExam) => {
+    try {
+      if (!exam.sunucuda) {
+        await sunucuyaYukle(exam, (n, t) => setDurum(`Sunucuya yükleniyor: ${n}/${t}`));
+        await load();
+      }
+      const url = onlineTestLinki(exam.id);
+      await navigator.clipboard.writeText(url).catch(() => undefined);
+      alert(`Link kopyalandı:\n${url}`);
+    } catch (e) {
+      alert(`Test sunucuya yüklenemedi: ${e instanceof Error ? e.message : "hata"}`);
+    } finally {
+      setDurum("");
+    }
   };
 
   const remove = async (id: string) => {
     if (!confirm("Bu online testi silmek istiyor musunuz?")) return;
+    try {
+      await sunucudanSil(id);
+    } catch (e) {
+      alert(`Sunucudan silinemedi: ${e instanceof Error ? e.message : "hata"}`);
+      return;
+    }
     await deleteOnlineExam(id);
+    if (viewResultsId === id) setViewResultsId(null);
     load();
   };
 
   const viewExam = exams.find((e) => e.id === viewResultsId);
-  const submissions = viewResultsId ? loadSubmissions(viewResultsId) : [];
 
   return (
     <div className="m-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow">
@@ -162,6 +213,10 @@ export function OnlineExamsPanel() {
           </button>
         </div>
       </div>
+
+      {durum && (
+        <div className="border-b bg-blue-50 px-4 py-2 text-sm text-blue-800">{durum}</div>
+      )}
 
       {draftQuestions.length > 0 && (
         <div className="border-b bg-slate-50 px-4 py-3">
@@ -211,11 +266,16 @@ export function OnlineExamsPanel() {
                           soru · {keyCount} cevap anahtarlı ·{" "}
                           {new Date(exam.createdAt).toLocaleDateString("tr-TR")}
                         </p>
+                        {!exam.sunucuda && (
+                          <p className="text-xs text-amber-700">
+                            Sunucuya yüklenmedi — link öğrencilerde açılmaz. Link simgesine basınca yüklenir.
+                          </p>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => copyLink(exam.id)}
+                          onClick={() => void copyLink(exam)}
                           className="rounded p-2 hover:bg-slate-100"
                           title="Link"
                         >
@@ -275,26 +335,21 @@ export function OnlineExamsPanel() {
         {viewExam && (
           <aside className="w-80 shrink-0 border-l bg-slate-50 p-4 overflow-y-auto">
             <h3 className="mb-2 font-bold text-sm">Sonuçlar — {viewExam.title}</h3>
-            {submissions.length === 0 ? (
-              <p className="text-xs text-slate-500">
-                Henüz teslim yok (aynı tarayıcıda kaydedilir).
-              </p>
+            {sonucDurum ? (
+              <p className="text-xs text-slate-500">{sonucDurum}</p>
+            ) : submissions.length === 0 ? (
+              <p className="text-xs text-slate-500">Henüz teslim yok.</p>
             ) : (
               <ul className="space-y-2">
-                {submissions.map((s, i) => {
-                  const graded = gradeAnswers(
-                    viewExam.questionSnapshots,
-                    s.answers
-                  );
-                  return (
+                {submissions.map((s, i) => (
                     <li
                       key={i}
                       className="rounded border bg-white p-2 text-sm"
                     >
                       <p className="font-medium">{s.studentName}</p>
-                      {graded.total > 0 ? (
+                      {s.total > 0 ? (
                         <p className="text-green-700">
-                          {graded.correct} / {graded.total} doğru
+                          {s.score} / {s.total} doğru
                         </p>
                       ) : (
                         <p className="text-slate-500">Anahtar yok</p>
@@ -303,8 +358,7 @@ export function OnlineExamsPanel() {
                         {new Date(s.submittedAt).toLocaleString("tr-TR")}
                       </p>
                     </li>
-                  );
-                })}
+                ))}
               </ul>
             )}
             <button

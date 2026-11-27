@@ -146,6 +146,8 @@ export interface OnlineExam {
   createdAt: number;
   published: boolean;
   durationMinutes?: number;
+  /** Sunucuya yüklendi mi? Yüklenmeyen test öğrencinin cihazında açılmaz. */
+  sunucuda?: boolean;
 }
 
 export interface ExamSubmission {
